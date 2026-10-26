@@ -1,3 +1,81 @@
+# Transkun
+
+**Transkun** 是 [Yujia-Yan/Transkun](https://github.com/Yujia-Yan/Transkun)（v2.0.1，
+MIT）的 fork，由 [404-GCross](https://github.com/404-GCross/Transkun) 维护，在模型之上
+加了可直接使用的应用层：
+
+- **命令行**：`transkun-app song.mp3 -o song.mid`（批量、后处理、设备选择）
+- **浏览器 WebUI**：`transkun-app --web --lan`，手机/平板/Mac 打开终端打印的带令牌
+  链接即可用；服务端排队、取消、重新转谱、下载原始/整理版 MIDI
+- **MIDI 整理（后处理）**：删弱音、删极短音、合并重复起音与琶音，默认关闭，结果另存
+  `.rearranged.mid`，保留延音踏板 CC64
+- **桌面界面与安装包**：Tk 界面、deb/rpm/AppImage/dmg、一键 `install.sh`（0.2.0）
+
+上游模型与权重原样保留：`transkun/pretrained/2.0.pt`（no-pedal-extension 变体，
+54 MB），上游 `transkun` 命令的行为不变。
+
+## 快速开始
+
+```bash
+python3 -m venv .venv
+.venv/bin/pip install -e '.[app]'
+
+# 上游 CLI（保持不变）
+.venv/bin/transkun song.wav song.mid --device cpu
+
+# 应用 CLI（支持 m4a/opus 等格式、进度、批量、后处理）
+.venv/bin/transkun-app song.mp3 -o song.mid
+.venv/bin/transkun-app song.mp3 --rearrange
+
+# WebUI：手机浏览器可用
+.venv/bin/transkun-app --web --lan
+```
+
+WebUI 默认端口 8765，令牌保存在 `~/.config/transkun/web_token`。**没有令牌连本机也
+打不开**（防止任意网页 POST 本机端口）；明文 HTTP，只应在局域网使用，不要做端口转发。
+单文件默认上限 1 GiB、时长 30 分钟、队列 8 个，结果保留 24 小时（`--max-bytes` /
+`--max-minutes` / `--queue` / `--keep-hours`）。
+
+依赖自检与端到端自检：
+
+```bash
+.venv/bin/transkun-app --check          # 依赖 + 权重，几秒
+.venv/bin/transkun-app --rearrange-only # MIDI 整理，19 项
+.venv/bin/transkun-app --selftest       # 合成音频 → 模型 → MIDI，约 1 分钟
+python -m transkun_app.webui.selftest   # WebUI 接口，50 项，不需要模型
+.venv/bin/python -m pytest tests -q
+```
+
+## 与上游的差异
+
+上游 `transkun/` 只做了三处必要修补：
+
+1. `setup.py`：`install_requires=[requirements]` 的嵌套 list 改为 `requirements`；
+   版本号改为本 fork 的 `0.1.0`；新增 `transkun-app` 入口和 `[app]`/`[dev]` extras。
+2. `transcribe.py`：用 `importlib.resources` 定位权重（setuptools ≥ 81 已移除
+   `pkg_resources`）；音频解码从 `pydub.from_mp3` 改为 `from_file`，m4a/opus 不再报错。
+3. `ModelTransformer.transcribe`：新增可选 `progressCallback(done, total)`，用于
+   WebUI 进度与取消（向后兼容，默认不传）。
+
+应用代码全部在 `transkun_app/`（引擎、CLI、WebUI、后处理），`packaging/` 放构建与
+安装脚本，`tests/` 放 pytest。发行版名与产物名都是 `transkun`。
+
+## 验证记录（0.1.0，4 核 CPU）
+
+| 音频 | 时长 | 耗时 | 音符 | CC64 |
+|---|---|---|---|---|
+| 合成琶音 | 60 s | 88 s | 214 | 0（音频本身无踏板） |
+| Debussy《月光》片段 | 60 s | 130 s | 270 | 32 个事件（16 次踩下） |
+
+峰值内存约 1.5–1.7 GB。模型只预测 CC64（延音）与 CC67（弱音），不输出 CC66；
+`writeMidi` 会把负 pitch 事件写成对应 CC。
+
+## 上游文档
+
+以下内容来自上游 README，保留原样。
+
+---
+
 # Piano Transcription with Neural Semi-CRF
 
 
@@ -289,3 +367,9 @@ url={https://openreview.net/forum?id=AzB2Pq7UFsA}
   year      = {2024},
 }
 ```
+
+## License
+
+上游 Transkun 与本 fork 均为 MIT（见 [LICENSE](LICENSE)）。`transkun_app/` 中
+WebUI 与 MIDI 整理的骨架改编自 404-GCross 的 MT3 Transcriber 项目（Apache-2.0），
+文件头保留了来源说明。

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Transkun 转谱服务（局域网）
+Name[en]=Transkun Web Service (LAN)
+Comment=Browser WebUI; the terminal prints the token link
+Comment[zh_CN]=浏览器 WebUI；终端会打印带令牌的链接
+Exec=transkun-app --web --lan
+Icon=transkun
+Terminal=true
+Categories=AudioVideo;Audio;Music;

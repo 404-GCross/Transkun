@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Transkun · 需要访问令牌</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="app">
+  <div class="wrap narrow">
+    <header class="top">
+      <div class="logo" aria-hidden="true"><i><span class="b1"></span><span class="b2"></span><span class="b3"></span></i></div>
+      <div class="title"><b>Transkun</b><em>需要访问令牌</em></div>
+    </header>
+
+    <section class="card login">
+      <p>这个地址需要访问令牌。请用启动服务时打印的带 <code>?t=…</code> 的链接打开，
+         或者把令牌贴在下面。</p>
+      <form method="get" action="/">
+        <input type="password" name="t" placeholder="访问令牌"
+               autofocus autocomplete="off" spellcheck="false">
+        <button class="btn primary" type="submit">进入</button>
+      </form>
+      <p class="hint">令牌保存在服务器的
+        <code>~/.config/transkun/web_token</code>；
+        用 <code>--new-token</code> 可以重新生成。</p>
+    </section>
+  </div>
+</div>
+</body>
+</html>

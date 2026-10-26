@@ -726,7 +726,9 @@ class TransKun(torch.nn.Module):
 
 
 
-    def transcribe(self, x, stepInSecond = None, segmentSizeInSecond = None, discardSecondHalf=False, mergeIncompleteEvent = True):
+    def transcribe(self, x, stepInSecond = None, segmentSizeInSecond = None, discardSecondHalf=False, mergeIncompleteEvent = True, progressCallback = None):
+        # progressCallback(doneSegments, totalSegments) is optional; raising from
+        # it aborts the loop (used by the app for progress and cancellation).
 
 
         if stepInSecond is None and segmentSizeInSecond is None:
@@ -754,8 +756,9 @@ class TransKun(torch.nn.Module):
 
         stepSize = math.ceil(stepInSecond*self.fs/self.hopSize)*self.hopSize
         segmentSize = math.ceil(segmentSizeInSecond*self.fs)
+        totalSegments = math.ceil(nSample / stepSize)
 
-        for i in range(0, nSample, stepSize):
+        for segmentIndex, i in enumerate(range(0, nSample, stepSize)):
             # t1 = time.time()
 
             j = min(i+ segmentSize, nSample)
@@ -826,6 +829,9 @@ class TransKun(torch.nn.Module):
 
 
             eventsAll.extend(curEvents)
+
+            if progressCallback is not None:
+                progressCallback(segmentIndex + 1, totalSegments)
 
         # handling incomplete events in the last segment
         for eventType in eventsByType:

@@ -1,0 +1,333 @@
+name: Build and release packages
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install (CPU PyTorch + app + dev)
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch torchaudio \
+            --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install -e '.[dev]'
+      - name: Static checks
+        run: |
+          python -m py_compile transkun_app/*.py transkun_app/webui/*.py setup.py
+          python -m compileall -q transkun
+          bash -n packaging/*.sh
+          python packaging/check-shell.py
+      - name: Dependency check
+        run: transkun-app --check
+      - name: Unit tests
+        run: python -m pytest tests -q
+      - name: MIDI post-processing selftest
+        run: transkun-app --rearrange-only
+      - name: WebUI selftest (no model)
+        run: python -m transkun_app.webui.selftest
+      - name: Install script dry-run
+        run: |
+          for distro in debian fedora; do
+            TRANSKUN_TEST_OS=Linux TRANSKUN_TEST_DISTRO=$distro TRANSKUN_TEST_ARCH=x86_64 \
+              bash packaging/install.sh --dry-run --no-probe --version 0.0.0 \
+              | tee "/tmp/install-$distro.txt"
+          done
+          grep -q 'transkun_0.0.0_amd64.deb' /tmp/install-debian.txt
+          grep -q 'transkun-0.0.0-1.x86_64.rpm' /tmp/install-fedora.txt
+          grep -q 'GitHub 直连（--no-probe）' /tmp/install-debian.txt
+          if grep -q '各取 256 KB' /tmp/install-debian.txt; then
+            echo '--no-probe 不应该测速' >&2; exit 1
+          fi
+
+          TRANSKUN_TEST_OS=Darwin TRANSKUN_TEST_ARCH=arm64 TRANSKUN_TEST_MACOS=13 \
+            bash packaging/install.sh --dry-run --no-probe --version 0.0.0 \
+            | tee /tmp/install-macos.txt
+          grep -q 'transkun-0.0.0-arm64.dmg' /tmp/install-macos.txt
+
+          TRANSKUN_TEST_OS=Linux TRANSKUN_TEST_DISTRO=fedora TRANSKUN_TEST_ARCH=x86_64 \
+            bash packaging/install.sh --dry-run --mirror https://gh-proxy.com \
+            --version 0.0.0 | tee /tmp/install-mirror.txt
+          grep -q 'https://gh-proxy.com/https://github.com/404-GCross/Transkun/releases' \
+            /tmp/install-mirror.txt
+
+          if TRANSKUN_TEST_OS=Darwin TRANSKUN_TEST_ARCH=x86_64 TRANSKUN_TEST_MACOS=13 \
+               bash packaging/install.sh --dry-run --no-probe --version 0.0.0; then
+            echo 'Intel Mac 应该被拒绝' >&2; exit 1
+          fi
+          if TRANSKUN_TEST_OS=Linux TRANSKUN_TEST_DISTRO=fedora TRANSKUN_TEST_ARCH=aarch64 \
+               bash packaging/install.sh --dry-run --no-probe --version 0.0.0; then
+            echo 'Linux arm64 应该被拒绝' >&2; exit 1
+          fi
+
+  tcltk:
+    # 0.2.0 的 Tk 界面需要带 Xft 的 Tcl/Tk；0.1.0 的 CLI/WebUI 不用，但随包带着不碍事。
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Tcl/Tk build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config zlib1g-dev \
+            libx11-dev libxss-dev libxext-dev libxft-dev libfontconfig1-dev \
+            libxrender-dev
+      - name: Build Xft-capable Tcl/Tk
+        run: |
+          bash packaging/build-tcltk.sh "$PWD/.tcltk"
+          tar -czf tcltk-prefix.tar.gz -C .tcltk .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transkun-tcltk
+          path: tcltk-prefix.tar.gz
+          retention-days: 14
+
+  runtime:
+    needs: [test]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build offline runtime
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y zstd
+          VERSION="${GITHUB_REF_NAME#v}"
+          case "$VERSION" in [0-9]*) ;; *) VERSION="0.0.0" ;; esac
+          VERSION="$VERSION" bash packaging/build-runtime.sh
+      - name: Verify the runtime survives a move
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          mkdir -p "$tmp/home"
+          tar --zstd -xf dist/transkun-runtime-*.tar.zst -C "$tmp/home"
+          "$tmp/home/venv/bin/python" -m transkun_app.import_check
+          "$tmp/home/venv/bin/python" -m transkun_app.midi_rearrange --selftest
+          rm -rf "$tmp"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transkun-runtime
+          path: dist/transkun-runtime-*.tar.zst
+          retention-days: 7
+
+  deb:
+    needs: [test, tcltk, runtime]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: transkun-tcltk
+      - uses: actions/download-artifact@v4
+        with:
+          name: transkun-runtime
+      - name: Extract Tcl/Tk
+        run: mkdir -p .tcltk && tar -xzf tcltk-prefix.tar.gz -C .tcltk
+      - name: Build Debian package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev fakeroot zstd
+          VERSION="${GITHUB_REF_NAME#v}"
+          case "$VERSION" in [0-9]*) ;; *) VERSION="0.0.0" ;; esac
+          runtime_tarball=(transkun-runtime*.tar.zst)
+          test -f "${runtime_tarball[0]}" || { echo "找不到运行时 tar.zst"; exit 1; }
+          RUNTIME_TARBALL="$PWD/${runtime_tarball[0]}" \
+          TCLTK_DIR="$PWD/.tcltk" VERSION="$VERSION" bash packaging/build-deb.sh
+          ls -lh dist/
+      - name: Verify the package ships the offline payload
+        run: |
+          set -euo pipefail
+          listing="$(dpkg-deb -c dist/*.deb)"
+          depends="$(dpkg-deb -f dist/*.deb Depends)"
+          case "$listing" in *runtime.tar.zst*) ;; *) echo "缺少 runtime.tar.zst"; exit 1 ;; esac
+          case "$listing" in *transkun/pretrained/2.0.pt*) ;; *) echo "缺少 2.0.pt"; exit 1 ;; esac
+          case "$listing" in *transkun/VERSION*) ;; *) echo "缺少 VERSION"; exit 1 ;; esac
+          case "$depends" in *zstd*) ;; *) echo "Depends 缺 zstd"; exit 1 ;; esac
+          size="$(dpkg-deb -c dist/*.deb | awk '/runtime\.tar\.zst$/ {print $3}')"
+          test "${size:-0}" -gt 100000000
+          echo "runtime.tar.zst: $((size / 1024 / 1024)) MiB"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transkun-deb
+          path: dist/*.deb
+          compression-level: 0
+
+  rpm:
+    needs: [test, tcltk, runtime]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: transkun-tcltk
+      - uses: actions/download-artifact@v4
+        with:
+          name: transkun-runtime
+      - name: Extract Tcl/Tk
+        run: mkdir -p .tcltk && tar -xzf tcltk-prefix.tar.gz -C .tcltk
+      - name: Build RPM package
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y rpm bash coreutils zstd
+          VERSION="${GITHUB_REF_NAME#v}"
+          case "$VERSION" in [0-9]*) ;; *) VERSION="0.0.0" ;; esac
+          runtime_tarball=(transkun-runtime*.tar.zst)
+          test -f "${runtime_tarball[0]}" || { echo "找不到运行时 tar.zst"; exit 1; }
+          RUNTIME_TARBALL="$PWD/${runtime_tarball[0]}" \
+          TCLTK_DIR="$PWD/.tcltk" VERSION="$VERSION" bash packaging/build-rpm.sh
+          ls -lh dist/
+      - name: Verify the package ships the offline payload
+        run: |
+          set -euo pipefail
+          listing="$(rpm -qpl dist/*.rpm)"
+          requires="$(rpm -qp --requires dist/*.rpm)"
+          installed="$(rpm -qp --qf '%{SIZE}' dist/*.rpm 2>/dev/null || true)"
+          installed="${installed//[^0-9]/}"
+          pkgbytes="$(stat -c %s dist/*.rpm)"
+          case "$listing" in *runtime.tar.zst*) ;; *) echo "缺少 runtime.tar.zst"; exit 1 ;; esac
+          case "$listing" in *transkun/pretrained/2.0.pt*) ;; *) echo "缺少 2.0.pt"; exit 1 ;; esac
+          case "$listing" in */VERSION*) ;; *) echo "缺少 VERSION"; exit 1 ;; esac
+          case "$requires" in *zstd*) ;; *) echo "Requires 缺 zstd"; exit 1 ;; esac
+          if [ "${installed:-0}" -le 500000000 ] && [ "${pkgbytes:-0}" -le 500000000 ]; then
+            echo "payload 体积异常：installed=${installed:-0} package=${pkgbytes:-0}"
+            exit 1
+          fi
+          echo "安装体积: ${installed:-?} bytes / 包体积: $((pkgbytes / 1024 / 1024)) MiB"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transkun-rpm
+          path: dist/*.rpm
+          compression-level: 0
+
+  appimage:
+    needs: [test]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl ca-certificates file
+      - name: Build AppImage
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          case "$VERSION" in [0-9]*) ;; *) VERSION="0.0.0" ;; esac
+          VERSION="$VERSION" bash packaging/build-appimage.sh
+      - name: Smoke test the AppImage dependencies
+        run: |
+          set -euo pipefail
+          appdir="$PWD/.appimage/Transkun.AppDir"
+          "$appdir/usr/venv/bin/python" -m transkun_app.import_check
+          "$appdir/usr/venv/bin/python" -m transkun_app.midi_rearrange --selftest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transkun-appimage
+          path: dist/*.AppImage
+          retention-days: 14
+
+  macos:
+    # Apple Silicon .app + .dmg；权重随 transkun/pretrained 一起复制，无需额外下载。
+    needs: [test]
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/uv-cache
+          key: uv-macos-${{ hashFiles('setup.py') }}
+      - name: Build Transkun.app and the dmg
+        env:
+          UV_CACHE_DIR: ${{ runner.temp }}/uv-cache
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          case "$VERSION" in [0-9]*) ;; *) VERSION="0.0.0" ;; esac
+          VERSION="$VERSION" bash packaging/build-macos.sh
+          ls -lh dist/
+      - name: Verify the bundle (moved app + read-only dmg)
+        run: bash packaging/verify-macos.sh dist/*.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transkun-macos
+          path: dist/*.dmg
+          retention-days: 14
+          compression-level: 0
+
+  install-script:
+    name: Install script (${{ matrix.image }})
+    needs: [deb, rpm]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: debian:12
+            artifact: deb
+          - image: fedora:40
+            artifact: rpm
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: transkun-${{ matrix.artifact }}
+          path: dist
+      - name: Install inside ${{ matrix.image }} and probe the WebUI
+        run: |
+          docker run --rm \
+            -v "$PWD":/work -w /work \
+            "${{ matrix.image }}" \
+            bash -c '
+              set -e
+              if command -v apt-get >/dev/null 2>&1; then
+                export DEBIAN_FRONTEND=noninteractive
+                apt-get update -qq
+                apt-get install -y -qq curl zstd
+              else
+                dnf install -y -q curl zstd
+              fi
+              pkg=$(ls dist/*.deb dist/*.rpm 2>/dev/null | head -1)
+              echo "安装 $pkg"
+              bash packaging/install.sh --file "$pkg" --yes
+              transkun-app --version
+              transkun --help >/dev/null
+              transkun-app --web --port 18999 --token ci-token \
+                >/tmp/web.log 2>&1 &
+              for i in $(seq 1 180); do
+                if curl -fsS http://127.0.0.1:18999/api/health >/dev/null 2>&1; then
+                  curl -fsS http://127.0.0.1:18999/api/health
+                  exit 0
+                fi
+                sleep 1
+              done
+              echo "WebUI 没起来" >&2
+              cat /tmp/web.log >&2 || true
+              exit 1
+            '
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [deb, rpm, appimage, macos, install-script]
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+          pattern: transkun-*
+      - name: Checksums
+        run: |
+          cp packaging/install.sh dist/install.sh
+          sha256sum dist/* > dist/SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

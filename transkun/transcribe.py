@@ -9,7 +9,9 @@ from .Util import computeParamSize
 
 def readAudio(path,  normalize= True):
     import pydub
-    audio = pydub.AudioSegment.from_mp3(path)
+    # from_file 让 ffmpeg 自己识别容器（m4a/opus/aac 等）；from_mp3 会强制按
+    # mp3 解复用，除 wav/mp3 外的格式都会 CouldntDecodeError。
+    audio = pydub.AudioSegment.from_file(path)
     y = np.array(audio.get_array_of_samples())
     y = y.reshape(-1, audio.channels)
     if normalize:
@@ -17,12 +19,24 @@ def readAudio(path,  normalize= True):
     return audio.frame_rate, y
 
 
+def _pretrainedPath(name):
+    """Locate a bundled checkpoint without requiring pkg_resources.
+
+    setuptools >= 81 no longer ships pkg_resources, so prefer importlib.resources
+    and keep the old lookup only as a fallback for very old Python/setuptools.
+    """
+    try:
+        from importlib.resources import files
+        return str(files(__package__).joinpath("pretrained", name))
+    except Exception:
+        import pkg_resources
+        return pkg_resources.resource_filename(__name__, "pretrained/" + name)
+
+
 def main():
 
-    import pkg_resources
-
-    defaultWeight =  (pkg_resources.resource_filename(__name__, "pretrained/2.0.pt"))
-    defaultConf =  (pkg_resources.resource_filename(__name__, "pretrained/2.0.conf"))
+    defaultWeight = _pretrainedPath("2.0.pt")
+    defaultConf = _pretrainedPath("2.0.conf")
 
     argumentParser = argparse.ArgumentParser()
     argumentParser.add_argument("audioPath", help = "path to the input audio file")
