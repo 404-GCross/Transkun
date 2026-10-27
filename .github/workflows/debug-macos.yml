@@ -1,0 +1,38 @@
+name: Debug macOS bundle
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  debug:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/uv-cache
+          key: uv-macos-${{ hashFiles('setup.py') }}
+      - name: Build bundle
+        env:
+          UV_CACHE_DIR: ${{ runner.temp }}/uv-cache
+        run: VERSION=0.2.0 bash packaging/build-macos.sh
+      - name: Probe launcher and run.sh
+        run: |
+          set -x
+          APP="$PWD/.macos/Transkun.app"
+          ls -l "$APP/Contents/MacOS/transkun" "$APP/Contents/Resources/gui/run.sh"
+          file "$APP/Contents/MacOS/transkun"
+          codesign -dv "$APP" 2>&1 || true
+          codesign --verify --deep --strict "$APP" 2>&1 || true
+          xattr -l "$APP" || true
+          echo "--- direct run.sh ---"
+          bash "$APP/Contents/Resources/gui/run.sh" --version || true
+          echo "--- launcher ---"
+          "$APP/Contents/MacOS/transkun" --version || true
+          echo "--- launcher log ---"
+          tail -80 "$HOME/Library/Logs/transkun.log" 2>/dev/null || true
+      - name: Verify dmg
+        run: bash packaging/verify-macos.sh dist/*.dmg

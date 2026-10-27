@@ -251,8 +251,8 @@ jobs:
           "$appdir/usr/venv/bin/python" -m transkun_app.import_check
           "$appdir/usr/venv/bin/python" -m transkun_app.midi_rearrange --selftest
           appimage="$(ls dist/*.AppImage)"
-          "$appimage" --version
-          xvfb-run -a "$appimage" --check-fonts
+          "$appimage" --appimage-extract-and-run --version
+          xvfb-run -a "$appimage" --appimage-extract-and-run --check-fonts
       - uses: actions/upload-artifact@v4
         with:
           name: transkun-appimage

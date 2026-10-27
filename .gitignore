@@ -169,3 +169,6 @@ cython_debug/
 .macos/
 .tcltk/
 .tcltk-build/
+
+# 我们的 RPM spec，不是 PyInstaller 生成的
+!packaging/transkun.spec

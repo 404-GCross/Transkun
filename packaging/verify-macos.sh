@@ -61,11 +61,23 @@ show_log() {
   tail -80 "$HOME/Library/Logs/transkun.log" 2>/dev/null >&2 || true
 }
 
-log "先在挂载卷上启动一次"
+log "先在挂载卷上启动一次（直接跑 run.sh，绕过启动器）"
+if ! TRANSKUN_DEBUG=1 bash "$RES/gui/run.sh" --version; then
+  echo "--- codesign ---" >&2
+  codesign -dv "$APP" 2>&1 >&2 || true
+  codesign --verify --deep --strict "$APP" 2>&1 >&2 || true
+  echo "--- xattr ---" >&2
+  xattr -l "$APP" 2>&1 >&2 || true
+  die "run.sh 在只读卷上无法启动"
+fi
 mkdir -p "$HOME/Library/Logs"
 : > "$HOME/Library/Logs/transkun.log"
 if ! TRANSKUN_DEBUG=1 "$APP/Contents/MacOS/transkun" --version >/dev/null; then
   show_log
+  echo "--- codesign ---" >&2
+  codesign --verify --deep --strict "$APP" 2>&1 >&2 || true
+  echo "--- xattr ---" >&2
+  xattr -l "$APP" 2>&1 >&2 || true
   die "只读卷上的 .app 无法启动"
 fi
 
