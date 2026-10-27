@@ -144,6 +144,12 @@ def build_parser() -> argparse.ArgumentParser:
         'audio', nargs='?', help='输入音频（wav/mp3/flac/ogg/m4a/aac/aiff/opus）')
     parser.add_argument('-o', '--output', help='输出 MIDI（默认与输入同名 .mid）')
     parser.add_argument(
+        '--gui', action='store_true',
+        help='打开桌面界面（不带参数时默认就是界面）；可同时给一个音频预选')
+    parser.add_argument(
+        '--cli', action='store_true',
+        help='强制命令行模式（脚本里建议显式加上）')
+    parser.add_argument(
         '--device', choices=['auto', 'cuda', 'cpu'], default='auto',
         help='推理设备（默认 auto：有 NVIDIA GPU 就用 CUDA）')
     parser.add_argument(
@@ -201,6 +207,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help='--selftest 的产物保留目录')
     parser.add_argument('--rearrange-only', action='store_true',
                         help='只跑 MIDI 整理自检（不需要模型）')
+    parser.add_argument('--check-fonts', action='store_true',
+                        help=argparse.SUPPRESS)
     parser.add_argument('--version', action='store_true', help='显示版本')
     return parser
 
@@ -245,13 +253,24 @@ def main(argv=None) -> int:
             parser.error('--batch-input 必须同时指定 --batch-output')
         return run_batch(args)
 
+    if args.check_fonts:
+        from transkun_app.gui import check_fonts
+        return check_fonts()
+
+    # 桌面界面：显式 --gui，或者完全不带参数（双击图标）。
+    if args.gui or (not args.audio and not args.cli):
+        if args.web:
+            parser.error('--gui 不能和 --web 一起用')
+        from transkun_app.gui import run_gui
+        return run_gui(args.audio)
+
     if args.audio:
         return run_cli(args)
 
     parser.print_help()
     print()
-    print('提示：在浏览器里用（手机也行）:')
-    print('  transkun-app --web --lan')
+    print('提示：桌面界面:  transkun-app')
+    print('      浏览器/手机: transkun-app --web --lan')
     return 0
 
 

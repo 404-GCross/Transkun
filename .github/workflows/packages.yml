@@ -37,6 +37,20 @@ jobs:
         run: transkun-app --rearrange-only
       - name: WebUI selftest (no model)
         run: python -m transkun_app.webui.selftest
+      - name: Tk GUI smoke test (Xvfb)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk xvfb fonts-noto-cjk
+          PYTHONPATH=. xvfb-run -a python3 -m transkun_app.cli --check-fonts
+          PYTHONPATH=. xvfb-run -a python3 -c "
+          from transkun_app.gui import TranskunApp
+          app = TranskunApp()
+          app.root.withdraw()
+          app.log('smoke')
+          app.root.update()
+          app.root.destroy()
+          print('Tk window smoke test ok')
+          "
       - name: Install script dry-run
         run: |
           for distro in debian fedora; do
@@ -216,7 +230,9 @@ jobs:
       - name: Install build tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl ca-certificates file
+          sudo apt-get install -y curl ca-certificates file xvfb fonts-noto-cjk \
+            libx11-6 libxft2 libfontconfig1 libfreetype6 libxrender1 \
+            libxss1 libxext6 libxcb1 libxau6 libxdmcp6
       - name: Build AppImage
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
@@ -228,6 +244,9 @@ jobs:
           appdir="$PWD/.appimage/Transkun.AppDir"
           "$appdir/usr/venv/bin/python" -m transkun_app.import_check
           "$appdir/usr/venv/bin/python" -m transkun_app.midi_rearrange --selftest
+          appimage="$(ls dist/*.AppImage)"
+          "$appimage" --version
+          xvfb-run -a "$appimage" --check-fonts
       - uses: actions/upload-artifact@v4
         with:
           name: transkun-appimage

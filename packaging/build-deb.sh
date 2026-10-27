@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-0.2.0}"
 ARCH="${ARCH:-amd64}"
 OUT="$ROOT/dist"
 PKG="$ROOT/.package/transkun"
-rm -rf "$PKG" "$OUT"
+rm -rf "$PKG"
+mkdir -p "$OUT"
+rm -f "$OUT"/transkun_*.deb
 find "$ROOT/transkun" "$ROOT/transkun_app" "$ROOT/packaging" \
   -type d -name __pycache__ -prune -exec rm -rf {} +
 mkdir -p "$PKG/DEBIAN" "$PKG/usr/share/transkun" \
@@ -15,7 +17,7 @@ cp -a "$ROOT/transkun" "$ROOT/transkun_app" "$ROOT/packaging" \
   "$PKG/usr/share/transkun/"
 # 启动器固定在包根目录（run.sh 用它判断是否已安装）。
 cp "$ROOT/packaging/run.sh" "$ROOT/packaging/install_cuda.sh" \
-  "$PKG/usr/share/transkun/"
+  "$ROOT/packaging/fix_tk_system.py" "$PKG/usr/share/transkun/"
 # setup.py 必须在，源码/兜底安装才能 pip install 本包。
 cp -a "$ROOT/setup.py" "$ROOT/README.md" "$ROOT/LICENSE" \
   "$PKG/usr/share/transkun/"

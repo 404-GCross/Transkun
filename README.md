@@ -9,7 +9,8 @@ MIT）的 fork，由 [404-GCross](https://github.com/404-GCross/Transkun) 维护
   链接即可用；服务端排队、取消、重新转谱、下载原始/整理版 MIDI
 - **MIDI 整理（后处理）**：删弱音、删极短音、合并重复起音与琶音，默认关闭，结果另存
   `.rearranged.mid`，保留延音踏板 CC64
-- **桌面界面与安装包**：Tk 界面、deb/rpm/AppImage/dmg、一键 `install.sh`（0.2.0）
+- **桌面界面**：`transkun-app` 打开 Tk 窗口（选文件、设备、后处理、进度、日志）
+- **安装包**：deb/rpm/AppImage/dmg、一键 `install.sh`（见 [PACKAGING.md](PACKAGING.md)）
 
 上游模型与权重原样保留：`transkun/pretrained/2.0.pt`（no-pedal-extension 变体，
 54 MB），上游 `transkun` 命令的行为不变。
@@ -23,6 +24,9 @@ python3 -m venv .venv
 # 上游 CLI（保持不变）
 .venv/bin/transkun song.wav song.mid --device cpu
 
+# 桌面界面（需要 tkinter；不带参数就是界面）
+.venv/bin/transkun-app
+
 # 应用 CLI（支持 m4a/opus 等格式、进度、批量、后处理）
 .venv/bin/transkun-app song.mp3 -o song.mid
 .venv/bin/transkun-app song.mp3 --rearrange
@@ -30,6 +34,8 @@ python3 -m venv .venv
 # WebUI：手机浏览器可用
 .venv/bin/transkun-app --web --lan
 ```
+
+桌面版（deb/rpm/AppImage/dmg）与一键安装脚本见 [PACKAGING.md](PACKAGING.md)。
 
 WebUI 默认端口 8765，令牌保存在 `~/.config/transkun/web_token`。**没有令牌连本机也
 打不开**（防止任意网页 POST 本机端口）；明文 HTTP，只应在局域网使用，不要做端口转发。
@@ -42,6 +48,7 @@ WebUI 默认端口 8765，令牌保存在 `~/.config/transkun/web_token`。**没
 .venv/bin/transkun-app --check          # 依赖 + 权重，几秒
 .venv/bin/transkun-app --rearrange-only # MIDI 整理，19 项
 .venv/bin/transkun-app --selftest       # 合成音频 → 模型 → MIDI，约 1 分钟
+.venv/bin/transkun-app --check-fonts    # Tk 中文字体（需要显示器，CI 用 xvfb）
 python -m transkun_app.webui.selftest   # WebUI 接口，50 项，不需要模型
 .venv/bin/python -m pytest tests -q
 ```

@@ -167,3 +167,5 @@ cython_debug/
 .package/
 .rpmbuild/
 .macos/
+.tcltk/
+.tcltk-build/

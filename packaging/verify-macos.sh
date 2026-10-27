@@ -65,6 +65,8 @@ sleep 1
   || die "复制后的 .app 无法启动"
 "$COPY/Contents/MacOS/transkun" --check >/dev/null \
   || die "复制后的 .app 依赖自检失败"
+"$COPY/Contents/MacOS/transkun" --check-fonts >/dev/null \
+  || warn "Tk 中文字体冒烟测试失败（无窗口会话时可能误报）"
 "$COPY/Contents/Resources/runtime/venv/bin/python" \
   -m transkun_app.midi_rearrange --selftest >/dev/null \
   || die "MIDI 整理自检失败"

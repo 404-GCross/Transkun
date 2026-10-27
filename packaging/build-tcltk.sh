@@ -6,7 +6,7 @@
 # 参见 https://github.com/astral-sh/python-build-standalone/issues/740
 #
 # 这个脚本编出一份与自带 Tcl 主版本一致的、启用 Xft 的 Tcl/Tk，供
-#   * AppImage 内置（gui/fix_tk_system.py --source ... --mode copy）
+#   * AppImage 内置（packaging/fix_tk_system.py --source ... --mode copy）
 #   * deb/rpm 内置（安装到 /usr/share/transkun/tcltk）
 # 使用。
 #

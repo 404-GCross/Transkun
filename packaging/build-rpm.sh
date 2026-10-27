@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.1.0}"
-rm -rf "$ROOT/.rpmbuild" "$ROOT/dist"
+VERSION="${VERSION:-0.2.0}"
+rm -rf "$ROOT/.rpmbuild"
+mkdir -p "$ROOT/dist"
+rm -f "$ROOT/dist"/transkun-*.rpm
 find "$ROOT/transkun" "$ROOT/transkun_app" "$ROOT/packaging" \
   -type d -name __pycache__ -prune -exec rm -rf {} +
 mkdir -p "$ROOT/.rpmbuild"/{BUILD,RPMS,SOURCES,SPECS,SRPMS}

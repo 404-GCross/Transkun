@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import mido
-import pytest
 
 from transkun_app import midi_rearrange
 

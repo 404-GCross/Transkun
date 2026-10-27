@@ -111,7 +111,7 @@ if [ ! -x "$VENV_DIR/bin/python" ]; then
   elif command -v python3 >/dev/null 2>&1; then
     if [ "${1:-}" = "--upstream-cli" ]; then
       shift
-      exec python3 -c 'from transkun.transcribe import main; main()' "$@"
+      exec python3 -c 'import sys; sys.argv[0]="transkun"; from transkun.transcribe import main; main()' "$@"
     fi
     exec python3 -m transkun_app.cli "$@"
   else
@@ -120,9 +120,54 @@ if [ ! -x "$VENV_DIR/bin/python" ]; then
   fi
 fi
 
-if [ "${1:-}" = "--upstream-cli" ]; then
-  shift
-  exec "$VENV_DIR/bin/transkun" "$@"
+# 带 Xft 的 Tcl/Tk（deb/rpm 安装到 /usr/share/transkun/tcltk）。uv 自带的 Tk
+# 没有 Xft，中文会显示成空白；macOS 的 Tk 走 CoreText，不需要这套。
+TRANSKUN_TCLTK_DIR="${TRANSKUN_TCLTK_DIR:-/usr/share/transkun/tcltk}"
+if [ "$IS_DARWIN" = 0 ]; then
+  if [ -z "${TCL_LIBRARY:-}" ] && [ -d "$TRANSKUN_TCLTK_DIR/lib/tcl9.0" ]; then
+    export TCL_LIBRARY="$TRANSKUN_TCLTK_DIR/lib/tcl9.0"
+  fi
+  if [ -z "${TK_LIBRARY:-}" ] && [ -d "$TRANSKUN_TCLTK_DIR/lib/tk9.0" ]; then
+    export TK_LIBRARY="$TRANSKUN_TCLTK_DIR/lib/tk9.0"
+  fi
+  if [ -d "$TRANSKUN_TCLTK_DIR/lib" ] && [ -f "$SCRIPT_DIR/fix_tk_system.py" ]; then
+    "$VENV_DIR/bin/python" "$SCRIPT_DIR/fix_tk_system.py" \
+      --python "$VENV_DIR/bin/python" --source "$TRANSKUN_TCLTK_DIR" --quiet || true
+  fi
 fi
 
-exec "$VENV_DIR/bin/transkun-app" "$@"
+# 没有随包 Tcl/Tk 时，退回 venv 自带的脚本目录。
+if [ -z "${TCL_LIBRARY:-}" ] || [ -z "${TK_LIBRARY:-}" ]; then
+  read -r TCL_DIR TK_DIR < <("$VENV_DIR/bin/python" - <<'PY'
+import os
+import sys
+tcl = tk = ''
+for name in ('tcl8.6', 'tcl8.7', 'tcl9.0'):
+    candidate = os.path.join(sys.base_prefix, 'lib', name)
+    if os.path.isdir(candidate):
+        tcl = candidate
+        break
+for name in ('tk8.6', 'tk8.7', 'tk9.0'):
+    candidate = os.path.join(sys.base_prefix, 'lib', name)
+    if os.path.isdir(candidate):
+        tk = candidate
+        break
+print(tcl, tk)
+PY
+)
+  [ -n "${TCL_LIBRARY:-}" ] || { [ -n "${TCL_DIR:-}" ] && export TCL_LIBRARY="$TCL_DIR"; }
+  [ -n "${TK_LIBRARY:-}" ] || { [ -n "${TK_DIR:-}" ] && export TK_LIBRARY="$TK_DIR"; }
+fi
+
+# 固定使用本包内的代码（避免 CWD 里的同名模块抢先），并让 `python -m` 找到它。
+export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
+# 用 `python -m` 而不是 venv/bin/transkun-app：后者的 shebang 指向构建机路径，
+# 运行时解压到 ~/.local/share/transkun 后会失效。
+if [ "${1:-}" = "--upstream-cli" ]; then
+  shift
+  exec "$VENV_DIR/bin/python" -c \
+    'import sys; sys.argv[0]="transkun"; from transkun.transcribe import main; main()' "$@"
+fi
+
+exec "$VENV_DIR/bin/python" -m transkun_app.cli "$@"

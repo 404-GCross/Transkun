@@ -92,7 +92,14 @@ log "安装 PyTorch（CPU）…"
   --index-url https://download.pytorch.org/whl/cpu
 
 log "安装 Transkun + 应用依赖（约 5~15 分钟）…"
-"$UV_BIN" pip install --python "$VENV_PY" "$ROOT[app]"
+# 先按 requirements.txt 装依赖，但跳过 torch/torchaudio：它们已经按 CPU/CUDA
+# 变体装好，不能让 PyPI 的默认 CUDA 轮子把它们换掉。
+grep -v -E '^(torch|torchaudio)[[:space:]]*$' "$ROOT/requirements.txt" \
+  > "$WORK/requirements-no-torch.txt"
+"$UV_BIN" pip install --python "$VENV_PY" -r "$WORK/requirements-no-torch.txt"
+"$UV_BIN" pip install --python "$VENV_PY" \
+  fastapi uvicorn python-multipart soundfile mido
+"$UV_BIN" pip install --python "$VENV_PY" --no-deps "$ROOT[app]"
 # 清掉 setuptools 就地构建的产物。
 rm -rf "$ROOT/build" "$ROOT"/*.egg-info "$ROOT"/transkun/*.egg-info
 
