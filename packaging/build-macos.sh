@@ -88,8 +88,9 @@ VENV_PY="$VENV_DIR/bin/python"
 
 # macOS 只支持 CPU（PyTorch 的 macOS 轮子没有 CUDA）。
 log "安装 PyTorch（CPU）…"
-"$UV_BIN" pip install --python "$VENV_PY" torch torchaudio \
-  --index-url https://download.pytorch.org/whl/cpu
+# macOS 的 PyPI 轮子本身就是 CPU-only；不要用 Linux 的 download.pytorch.org
+# 索引，那里不一定有 macOS/arm64 的 torchaudio。
+"$UV_BIN" pip install --python "$VENV_PY" torch torchaudio
 
 log "安装 Transkun + 应用依赖（约 5~15 分钟）…"
 # 先按 requirements.txt 装依赖，但跳过 torch/torchaudio：它们已经按 CPU/CUDA
