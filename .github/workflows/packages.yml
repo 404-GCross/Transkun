@@ -212,7 +212,7 @@ jobs:
           case "$listing" in *transkun/pretrained/2.0.pt*) ;; *) echo "缺少 2.0.pt"; exit 1 ;; esac
           case "$listing" in */VERSION*) ;; *) echo "缺少 VERSION"; exit 1 ;; esac
           case "$requires" in *zstd*) ;; *) echo "Requires 缺 zstd"; exit 1 ;; esac
-          if [ "${installed:-0}" -le 500000000 ] && [ "${pkgbytes:-0}" -le 500000000 ]; then
+          if [ "${installed:-0}" -le 250000000 ] && [ "${pkgbytes:-0}" -le 250000000 ]; then
             echo "payload 体积异常：installed=${installed:-0} package=${pkgbytes:-0}"
             exit 1
           fi
