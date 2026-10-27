@@ -223,10 +223,15 @@ jobs:
           compression-level: 0
 
   appimage:
-    needs: [test]
+    needs: [test, tcltk]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: transkun-tcltk
+      - name: Extract Tcl/Tk
+        run: mkdir -p .tcltk && tar -xzf tcltk-prefix.tar.gz -C .tcltk
       - name: Install build tools
         run: |
           sudo apt-get update
@@ -237,7 +242,7 @@ jobs:
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
           case "$VERSION" in [0-9]*) ;; *) VERSION="0.0.0" ;; esac
-          VERSION="$VERSION" bash packaging/build-appimage.sh
+          TCLTK_DIR="$PWD/.tcltk" VERSION="$VERSION" bash packaging/build-appimage.sh
       - name: Smoke test the AppImage dependencies
         run: |
           set -euo pipefail
