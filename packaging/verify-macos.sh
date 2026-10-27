@@ -56,28 +56,49 @@ home_line="$(grep -E '^home *= *\.\.' "$RES/runtime/venv/pyvenv.cfg" || true)"
 [ -n "$home_line" ] || die "pyvenv.cfg 的 home 不是相对路径"
 [ -L "$RES/runtime/venv/bin/python" ] || die "venv/bin/python 不是符号链接"
 
+show_log() {
+  echo "--- ~/Library/Logs/transkun.log ---" >&2
+  tail -80 "$HOME/Library/Logs/transkun.log" 2>/dev/null >&2 || true
+}
+
+log "先在挂载卷上启动一次"
+mkdir -p "$HOME/Library/Logs"
+: > "$HOME/Library/Logs/transkun.log"
+if ! TRANSKUN_DEBUG=1 "$APP/Contents/MacOS/transkun" --version >/dev/null; then
+  show_log
+  die "只读卷上的 .app 无法启动"
+fi
+
 log "复制到可写目录并启动（模拟用户拖到 /Applications）"
 cp -a "$APP" "$WORK/Transkun.app"
 COPY="$WORK/Transkun.app"
 touch "$WORK/stamp"
 sleep 1
-"$COPY/Contents/MacOS/transkun" --version >/dev/null \
-  || die "复制后的 .app 无法启动"
-"$COPY/Contents/MacOS/transkun" --check >/dev/null \
-  || die "复制后的 .app 依赖自检失败"
+: > "$HOME/Library/Logs/transkun.log"
+if ! TRANSKUN_DEBUG=1 "$COPY/Contents/MacOS/transkun" --version >/dev/null; then
+  show_log
+  die "复制后的 .app 无法启动"
+fi
+if ! "$COPY/Contents/MacOS/transkun" --check >/dev/null; then
+  show_log
+  die "复制后的 .app 依赖自检失败"
+fi
 "$COPY/Contents/MacOS/transkun" --check-fonts >/dev/null \
   || warn "Tk 中文字体冒烟测试失败（无窗口会话时可能误报）"
-"$COPY/Contents/Resources/runtime/venv/bin/python" \
+PYTHONDONTWRITEBYTECODE=1 "$COPY/Contents/Resources/runtime/venv/bin/python" \
   -m transkun_app.midi_rearrange --selftest >/dev/null \
   || die "MIDI 整理自检失败"
 
 log "8 秒端到端转谱（包内启动器）"
-"$COPY/Contents/Resources/runtime/venv/bin/python" - <<'PY'
+PYTHONDONTWRITEBYTECODE=1 "$COPY/Contents/Resources/runtime/venv/bin/python" - <<'PY'
 from transkun_app.selftest import make_arpeggio
 make_arpeggio(__import__('pathlib').Path('/tmp/transkun-verify.wav'), duration=8.0)
 PY
-"$COPY/Contents/MacOS/transkun" /tmp/transkun-verify.wav \
-  -o "$WORK/verify.mid" >/dev/null || die "端到端转谱失败"
+if ! "$COPY/Contents/MacOS/transkun" /tmp/transkun-verify.wav \
+    -o "$WORK/verify.mid" >/dev/null; then
+  show_log
+  die "端到端转谱失败"
+fi
 [ -s "$WORK/verify.mid" ] || die "没有生成 MIDI"
 
 log "检查运行没有改动包内文件"
