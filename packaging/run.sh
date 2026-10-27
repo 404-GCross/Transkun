@@ -14,7 +14,13 @@ set -euo pipefail
 [ "${TRANSKUN_DEBUG:-0}" = 1 ] && set -x
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_DIR="$(dirname "$SCRIPT_DIR")"
+# 源码布局：run.sh 在 packaging/，包根是父目录；deb/rpm 装到
+# /usr/share/transkun 后 run.sh 就在包根，不能再往上走一层。
+if [ "$SCRIPT_DIR" = "/usr/share/transkun" ]; then
+  REPO_DIR="$SCRIPT_DIR"
+else
+  REPO_DIR="$(dirname "$SCRIPT_DIR")"
+fi
 VENV_DIR="${TRANSKUN_VENV_DIR:-$REPO_DIR/.venv}"
 
 IS_DARWIN=0
