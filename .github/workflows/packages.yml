@@ -40,7 +40,8 @@ jobs:
       - name: Tk GUI smoke test (Xvfb)
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-tk xvfb fonts-noto-cjk
+          sudo apt-get install -y python3-tk xvfb xauth fonts-noto-cjk
+          sudo fc-cache -f >/dev/null 2>&1 || true
           PYTHONPATH=. xvfb-run -a python3 -m transkun_app.cli --check-fonts
           PYTHONPATH=. xvfb-run -a python3 -c "
           from transkun_app.gui import TranskunApp
