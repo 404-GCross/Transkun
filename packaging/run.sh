@@ -33,6 +33,8 @@ esac
 
 # 固定使用本包内的代码（避免 CWD 里的同名模块抢先）。
 export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
+# 不让 CWD 里的同名 transkun/ 目录抢先（用户可能正好在源码目录里运行）。
+export PYTHONSAFEPATH=1
 
 if [ "$IS_DARWIN" = 1 ]; then
   TRANSKUN_USER_HOME="${TRANSKUN_USER_HOME:-$HOME/Library/Application Support/Transkun}"

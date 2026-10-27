@@ -196,6 +196,7 @@ fi
 # 包内 venv 用的是绝对路径；AppImage 挂载点固定，可以直接用。
 # 固定使用包内代码（venv 里也装了一份，但显式指定更稳）。
 export PYTHONPATH="$HERE/usr/share/transkun${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONSAFEPATH=1
 
 # AppImage 挂载点与构建路径不同，不能直接 exec venv/bin/transkun-app
 # （shebang 指向构建机）。用 venv 的 python -m。
