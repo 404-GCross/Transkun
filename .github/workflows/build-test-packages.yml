@@ -6,8 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
 
+# 被调用的 packages.yml 里有 release job 声明 contents: write；GitHub 在
+# 启动前做静态权限校验，caller 必须至少授予同样的权限（即使 release 在分支
+# push 时不会运行）。
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
