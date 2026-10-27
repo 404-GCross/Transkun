@@ -220,9 +220,10 @@ git push origin v0.2.0
 | 上游 CLI / 应用 CLI / 批量 / 后处理 | 本机通过 |
 | WebUI（令牌、上传、队列、重转谱、下载） | 本机 50 项接口自检 + 真实 10 s 上传通过 |
 | pytest | 38 项通过（本机无 tkinter，GUI 用例跳过） |
-| 离线运行时 | 本机构建通过（339 MB，zstd -10；展开 1.4 GB，换路径后 import/自检通过） |
-| deb（含运行时 + 权重） | 本机构建通过（386 MB）；解包后 CLI / WebUI / 上游 CLI 均验证 |
+| 离线运行时 | 本机构建通过（339 MB，zstd -10；展开 1.4 GB）；venv 已改成相对路径，移走构建目录后 import/自检仍通过 |
+| deb（含运行时 + 权重） | 本机构建通过（386 MB）；解包后 CLI / WebUI / 上游 CLI 均验证，且构建目录移走后仍可用 |
 | Tk 界面 | 代码与 stub 测试完成；本机无显示器，已确认包内 Tk 9.0 可用、无 DISPLAY 时给出友好提示 |
+| macOS | CI（macos-14）完整通过：构建 .app/dmg、复制到可写目录、只读 dmg 启动、8 秒端到端转谱 |
 | AppImage | 本机构建通过（418 MB），`--version` / `--check` / WebUI 探活通过；内置 ffmpeg 7.0.2 与 Tk 9.0 |
 | AppImage 中文 | 本机缺 Xft 开发头文件和 Noto CJK，构建时跳过了带 Xft 的 Tcl/Tk 与字体；CI 会装齐后再构建 |
-| rpm / dmg | 脚本与 CI 完成；本机无 rpmbuild / macOS，待 CI 与真机验证 |
+| rpm | 脚本与 CI 完成；本机无 rpmbuild，CI 会在 tag 构建时验证 |
