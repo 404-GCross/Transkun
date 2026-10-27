@@ -77,6 +77,29 @@ grep -v -E '^(torch|torchaudio)[[:space:]]*$' "$ROOT/requirements.txt" \
 # 清掉 setuptools 就地构建留下的产物，别打进 AppImage。
 rm -rf "$SOURCE_DIR/build" "$SOURCE_DIR"/*.egg-info
 
+# uv 的 venv 把解释器写成了构建机的绝对路径；改成相对路径，AppImage 才能在
+# 别的挂载点/机器上运行。
+relocate_venv() {  # relocate_venv VENV_DIR BASE_DIR
+  local venv="$1" base="$2" rel_py
+  rel_py="$(cd "$base" && ls -d python/*/bin/python3.12 | head -1 || true)"
+  [ -n "$rel_py" ] || die "未找到运行时解释器（$base/python）"
+  rm -f "$venv/bin/python" "$venv/bin/python3" "$venv/bin/python3.12"
+  ln -s "../../$rel_py" "$venv/bin/python"
+  ln -s python "$venv/bin/python3"
+  ln -s python "$venv/bin/python3.12"
+  cat > "$venv/pyvenv.cfg" <<EOF
+home = ../$(dirname "$rel_py")
+implementation = CPython
+version_info = 3.12
+include-system-site-packages = false
+relocatable = true
+EOF
+}
+
+relocate_venv "$APPDIR/usr/venv" "$APPDIR/usr"
+
+
+
 # ---------------------------------------------------------------- Tcl/Tk + 字体
 # uv 自带的 Tcl/Tk 没启用 Xft，中文会显示成空白；内置一份带 Xft 的，并把
 # fontconfig/freetype 等依赖复制进来，做到目标机零依赖。

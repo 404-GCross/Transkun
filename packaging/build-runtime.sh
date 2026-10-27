@@ -109,6 +109,24 @@ grep -v -E '^(torch|torchaudio)[[:space:]]*$' "$ROOT/requirements.txt" \
 # 清掉 setuptools 就地构建的产物。
 rm -rf "$ROOT/build" "$ROOT"/*.egg-info
 
+
+relocate_venv() {  # relocate_venv VENV_DIR BASE_DIR
+  local venv="$1" base="$2" rel_py
+  rel_py="$(cd "$base" && ls -d python/*/bin/python3.12 | head -1 || true)"
+  [ -n "$rel_py" ] || die "未找到运行时解释器（$base/python）"
+  rm -f "$venv/bin/python" "$venv/bin/python3" "$venv/bin/python3.12"
+  ln -s "../../$rel_py" "$venv/bin/python"
+  ln -s python "$venv/bin/python3"
+  ln -s python "$venv/bin/python3.12"
+  cat > "$venv/pyvenv.cfg" <<EOF
+home = ../$(dirname "$rel_py")
+implementation = CPython
+version_info = 3.12
+include-system-site-packages = false
+relocatable = true
+EOF
+}
+
 # ---------------------------------------------------------------- 可重定位化
 # uv 会在 python/ 下建一个绝对符号链接（cpython-3.12-linux-x86_64-gnu ->
 # cpython-3.12.x-linux-x86_64-gnu）。解压到别的目录后它会变成死链接，改成相对。
@@ -122,9 +140,10 @@ done
 rm -rf "$RUNTIME_HOME/python/.temp" "$RUNTIME_HOME/python/.lock" \
        "$RUNTIME_HOME/python/.gitignore"
 
-# 记下解释器相对位置，run.sh 解压后用它校正 venv（uv 的 venv 存的是构建路径）。
+# uv 的 venv 把解释器写成了构建机的绝对路径；改成相对路径后，解压到
+# ~/.local/share/transkun（或别的目录）才能用。
+relocate_venv "$VENV_DIR" "$RUNTIME_HOME"
 rel_py="$(cd "$RUNTIME_HOME" && ls -d python/*/bin/python3.12 | head -1 || true)"
-[ -n "$rel_py" ] || die "未找到运行时解释器"
 
 # 自检：把应用用到的依赖都 import 一遍。
 log "运行时自检…"

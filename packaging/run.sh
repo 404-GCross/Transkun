@@ -25,9 +25,14 @@ INSTALLED=0
 
 APP_RES=""
 case "$SCRIPT_DIR" in
+  # macOS .app: run.sh 在 Contents/Resources/gui/ 下
+  */Contents/Resources/gui) APP_RES="${SCRIPT_DIR%/gui}" ;;
   */Contents/Resources) APP_RES="$SCRIPT_DIR" ;;
 esac
 [ -n "$APP_RES" ] && INSTALLED=1
+
+# 固定使用本包内的代码（避免 CWD 里的同名模块抢先）。
+export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 if [ "$IS_DARWIN" = 1 ]; then
   TRANSKUN_USER_HOME="${TRANSKUN_USER_HOME:-$HOME/Library/Application Support/Transkun}"
@@ -159,9 +164,6 @@ PY
   [ -n "${TCL_LIBRARY:-}" ] || { [ -n "${TCL_DIR:-}" ] && export TCL_LIBRARY="$TCL_DIR"; }
   [ -n "${TK_LIBRARY:-}" ] || { [ -n "${TK_DIR:-}" ] && export TK_LIBRARY="$TK_DIR"; }
 fi
-
-# 固定使用本包内的代码（避免 CWD 里的同名模块抢先），并让 `python -m` 找到它。
-export PYTHONPATH="$REPO_DIR${PYTHONPATH:+:$PYTHONPATH}"
 
 # 用 `python -m` 而不是 venv/bin/transkun-app：后者的 shebang 指向构建机路径，
 # 运行时解压到 ~/.local/share/transkun 后会失效。
