@@ -28,12 +28,16 @@ app_requirements = [
 "uvicorn",
 "python-multipart",   # WebUI multipart uploads
 "soundfile",          # wav/flac/ogg decoding without ffmpeg
-"mido",               # MIDI post-processing / WebUI preview
+"mido",               # MIDI preview / score helpers
+"music21",            # notation, analysis, MusicXML
+"verovio",            # MusicXML -> SVG
+"cairosvg",           # SVG -> PDF
+"pikepdf",            # PDF page merge
 ]
 
 setuptools.setup(
     name="transkun",
-    version="0.2.0",
+    version="0.3.0",
     author="Yujia Yan; 404-GCross fork",
     description='Transkun: automatic piano transcription (CLI, WebUI, desktop app)',
     long_description=long_description,
@@ -48,6 +52,7 @@ setuptools.setup(
     package_data={
         'transkun.pretrained': ['*.pt', '*.conf'],
         'transkun_app.webui': ['static/*'],
+        'transkun_app.score': ['assets/*'],
     },
     python_requires=">=3.10",
     entry_points={
@@ -55,6 +60,7 @@ setuptools.setup(
             'transkun = transkun.transcribe:main',
             'transkunEval = transkun.computeMetrics:main',
             'transkun-app = transkun_app.cli:main',
+            'transkun-score = transkun_app.score.cli:main',
         ]
     },
     install_requires=requirements,

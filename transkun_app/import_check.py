@@ -15,9 +15,13 @@ MODULES = [
     'pretty_midi', 'mido', 'pydub', 'soxr', 'soundfile',
     'mir_eval', 'ncls',
     'transkun.ModelTransformer', 'transkun.Data', 'transkun.Util',
-    'transkun_app', 'transkun_app.backend', 'transkun_app.midi_rearrange',
+    'transkun_app', 'transkun_app.backend', 'transkun_app.score',
     'fastapi', 'uvicorn', 'multipart', 'starlette',
+    'music21', 'verovio',
 ]
+
+# PDF 渲染依赖；macOS/AppImage 上可能没有 libcairo，缺了只影响 PDF。
+OPTIONAL_MODULES = ['cairosvg', 'pikepdf']
 
 
 def main(argv=None) -> int:
@@ -30,6 +34,14 @@ def main(argv=None) -> int:
             print(f'  [FAIL] {name}: {type(exc).__name__}: {exc}')
         else:
             print(f'  [OK]   {name}')
+
+    for name in OPTIONAL_MODULES:
+        try:
+            importlib.import_module(name)
+            print(f'  [OK]   {name}')
+        except Exception as exc:  # noqa: BLE001
+            print(f'  [WARN] {name}: {type(exc).__name__}: {exc} '
+                  '（只影响 PDF，MusicXML/SVG 仍可用）')
 
     try:
         from transkun_app import backend

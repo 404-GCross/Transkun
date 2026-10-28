@@ -84,12 +84,20 @@ def make_runner(delay=0.02, fail=False):
         job.notes = 2
         job.pedals = 1
         job.roll = jobs_module.midi_roll(raw)
-        if job.rearrange:
-            import transkun_app.midi_rearrange as midi_rearrange
-            result = midi_rearrange.rearrange_file(
-                raw, job.directory / 'out.rearranged.mid', **job.rearrange)
-            job.rearranged_path = result.path
-            job.rearrange_detail = result.detail()
+        if job.score:
+            musicxml = job.directory / 'out.score.musicxml'
+            musicxml.write_text('<?xml version="1.0"?><score-partwise/>',
+                                encoding='utf-8')
+            pdf = job.directory / 'out.score.pdf'
+            pdf.write_bytes(b'%PDF-1.4\n%%EOF\n')
+            score_midi = job.directory / 'out.score.mid'
+            write_fake_midi(score_midi)
+            job.score_musicxml = musicxml
+            job.score_pdf = pdf
+            job.score_midi = score_midi
+            job.score_detail = 'demo'
+            job.score_meta = {'key': 'D', 'time_signature': '3/4', 'bpm': 120}
+
 
     return runner
 
@@ -101,8 +109,9 @@ def make_client(runner=None, **overrides):
         jobs_dir=Path(temp) / 'jobs',
         device_info='fake:cpu',
         version='test',
-        rearrange_defaults={
-            'velocity': 30, 'min_ms': 30, 'chord_ms': 60, 'repeat_ms': 120},
+        score_defaults={
+            'mode': 'block', 'key': 'auto', 'time_signature': 'auto',
+            'bpm': '', 'pdf': True},
     )
     for key, value in overrides.items():
         setattr(config, key, value)
@@ -135,11 +144,12 @@ def wait_for(client, job_id, timeout=20.0, headers=None):
 def upload(client, name='a.wav', payload=None, extra=None, headers=None):
     data = {
         'model': '2.0',
-        'rearrange': 'false',
-        'velocity': '30',
-        'min_ms': '30',
-        'chord_ms': '60',
-        'repeat_ms': '120',
+        'score': 'false',
+        'score_mode': 'block',
+        'score_key': 'auto',
+        'score_time_signature': 'auto',
+        'score_bpm': '',
+        'score_pdf': 'true',
     }
     data.update(extra or {})
     return client.post(
@@ -206,7 +216,7 @@ def test_limits():
 
 def test_job_flow():
     client, _ = make_client()
-    response = upload(client, extra={'rearrange': 'true'})
+    response = upload(client, extra={'score': 'true'})
     check('上传返回 202', response.status_code == 202, response.text)
     job_id = response.json()['id']
 
@@ -227,12 +237,19 @@ def test_job_flow():
     check('下载文件名来自上传名',
           'a.mid' in raw.headers.get('content-disposition', ''))
 
-    rearranged = client.get('/api/jobs/{}/midi?kind=rearranged'.format(job_id))
-    check('下载整理版 MIDI',
-          rearranged.status_code == 200 and len(rearranged.content) > 0)
+    musicxml = client.get('/api/jobs/{}/score?kind=musicxml'.format(job_id))
+    check('下载 MusicXML',
+          musicxml.status_code == 200 and len(musicxml.content) > 0)
+    pdf = client.get('/api/jobs/{}/score?kind=pdf'.format(job_id))
+    check('下载 PDF', pdf.status_code == 200 and len(pdf.content) > 0)
+    score_midi = client.get('/api/jobs/{}/midi?kind=score'.format(job_id))
+    check('下载打谱版 MIDI',
+          score_midi.status_code == 200 and len(score_midi.content) > 0)
 
     bad = client.get('/api/jobs/{}/midi?kind=nope'.format(job_id))
-    check('未知 kind 返回 400', bad.status_code == 400)
+    check('未知 MIDI kind 返回 400', bad.status_code == 400)
+    bad = client.get('/api/jobs/{}/score?kind=nope'.format(job_id))
+    check('未知 score kind 返回 400', bad.status_code == 400)
 
     events = client.get('/api/jobs/{}/events'.format(job_id))
     check('SSE 最后一条是最终状态',
@@ -251,12 +268,13 @@ def test_job_flow():
 def test_retry():
     client, manager = make_client()
     first = upload(client, name='retry.wav',
-                   extra={'rearrange': 'true'}).json()['id']
+                   extra={'score': 'true'}).json()['id']
     check('首次任务完成', wait_for(client, first)['status'] == 'done')
 
     response = client.post('/api/jobs/{}/retry'.format(first), params={
-        'model': '2.0', 'rearrange': 'false',
-        'velocity': '30', 'min_ms': '30', 'chord_ms': '60', 'repeat_ms': '120'})
+        'model': '2.0', 'score': 'false', 'score_mode': 'block',
+        'score_key': 'auto', 'score_time_signature': 'auto',
+        'score_bpm': '', 'score_pdf': 'true'})
     check('重新转谱返回 202', response.status_code == 202, response.text)
     second = response.json()['id']
     check('重新转谱是新任务', second != first)
@@ -265,7 +283,8 @@ def test_retry():
     check('新任务完成', job['status'] == 'done', str(job))
     check('新任务沿用文件名', job['filename'] == 'retry.wav', str(job['filename']))
     check('新任务沿用模型', job['model'] == '2.0')
-    check('新任务没有整理版', job['rearranged'] is False)
+    check('新任务没有打谱版', job['score']['musicxml'] is False
+          and job['score']['pdf'] is False)
 
     first_input = manager._jobs[first].input_path
     second_input = manager._jobs[second].input_path

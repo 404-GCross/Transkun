@@ -5,7 +5,7 @@
 #   bash packaging/verify-macos.sh dist/transkun-0.2.0-arm64.dmg
 #
 # 检查内容：包结构、Mach-O 启动器、Info.plist、可搬动的 venv、随包权重；
-# 把 .app 复制到别处真跑 --version / --check / MIDI 整理自检 / 8 秒端到端转谱；
+# 把 .app 复制到别处真跑 --version / --check / 打谱自检 / 8 秒端到端转谱；
 # 最后从只读挂载的 dmg 里直接启动一次。
 
 set -euo pipefail
@@ -98,8 +98,8 @@ fi
 "$COPY/Contents/MacOS/transkun" --check-fonts >/dev/null \
   || warn "Tk 中文字体冒烟测试失败（无窗口会话时可能误报）"
 PYTHONDONTWRITEBYTECODE=1 "$COPY/Contents/Resources/runtime/venv/bin/python" \
-  -m transkun_app.midi_rearrange --selftest >/dev/null \
-  || die "MIDI 整理自检失败"
+  -m transkun_app.score.selftest --no-pdf >/dev/null \
+  || die "打谱自检失败"
 
 log "8 秒端到端转谱（包内启动器）"
 PYTHONDONTWRITEBYTECODE=1 "$COPY/Contents/Resources/runtime/venv/bin/python" - <<'PY'

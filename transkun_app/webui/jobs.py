@@ -53,14 +53,19 @@ class Job:
     model: str
     directory: Path
     input_path: Path
-    rearrange: Optional[dict] = None
+    score: Optional[dict] = None
     status: str = QUEUED
     done: int = 0
     total: Optional[int] = None
     error: Optional[str] = None
     raw_path: Optional[Path] = None
-    rearranged_path: Optional[Path] = None
-    rearrange_detail: Optional[str] = None
+    score_musicxml: Optional[Path] = None
+    score_pdf: Optional[Path] = None
+    score_midi: Optional[Path] = None
+    score_detail: Optional[str] = None
+    score_meta: Optional[dict] = None
+    score_stats: Optional[dict] = None
+    score_error: Optional[str] = None
     notes: Optional[int] = None
     pedals: Optional[int] = None
     # 给页面画钢琴卷用的预览：[[x, y, w], ...]，都是 0..1。
@@ -104,9 +109,16 @@ class Job:
             'finished': self.finished,
             'elapsed': max(0.0, end - started),
             'raw': bool(self.raw_path and Path(self.raw_path).exists()),
-            'rearranged': bool(
-                self.rearranged_path and Path(self.rearranged_path).exists()),
-            'rearrange_detail': self.rearrange_detail,
+            'score': {
+                'musicxml': bool(self.score_musicxml
+                                 and Path(self.score_musicxml).exists()),
+                'pdf': bool(self.score_pdf and Path(self.score_pdf).exists()),
+                'midi': bool(self.score_midi and Path(self.score_midi).exists()),
+                'detail': self.score_detail,
+                'meta': self.score_meta,
+                'stats': self.score_stats,
+                'error': self.score_error,
+            },
             'roll': self.roll,
             'queue_position': queue_position,
             'log': list(self.log_lines)[-20:],
@@ -177,14 +189,19 @@ class JobManager:
             return job.to_dict(self._positions_locked().get(job_id))
 
     def path(self, job_id, kind):
-        """任务结果的落盘路径（``raw`` 或 ``rearranged``）。"""
+        """任务结果的落盘路径（raw / musicxml / pdf / score_midi）。"""
         with self._lock:
             job = self._jobs.get(job_id)
             if job is None:
                 return None
-            return job.raw_path if kind == 'raw' else job.rearranged_path
+            return {
+                'raw': job.raw_path,
+                'musicxml': job.score_musicxml,
+                'pdf': job.score_pdf,
+                'score_midi': job.score_midi,
+            }.get(kind)
 
-    def clone_for_retry(self, job_id, model, rearrange):
+    def clone_for_retry(self, job_id, model, score):
         """用同一个输入文件再跑一遍（硬链接复用，不复制、不重新上传）。"""
         with self._lock:
             source = self._jobs.get(job_id)
@@ -205,7 +222,7 @@ class JobManager:
             shutil.copyfile(input_path, target)
 
         job = Job(id=new_id, filename=filename, model=model, directory=directory,
-                  input_path=target, rearrange=rearrange)
+                  input_path=target, score=score)
         job.log('从 {} 重新转谱（复用已上传的文件）'.format(job_id))
         try:
             return self.submit(job)
@@ -377,7 +394,6 @@ def make_runner(config):
 
     def runner(job, manager):
         from transkun_app import backend
-        from transkun_app import midi_rearrange
 
         transcriber = backend.get_transcriber(
             device=config.device, threads=config.threads,
@@ -415,12 +431,27 @@ def make_runner(config):
         job.log('原始 MIDI: {}（{} 个音符，{} 个踏板区间）'.format(
             raw.name, job.notes, job.pedals))
 
-        if job.rearrange:
-            job.log('整理 MIDI…')
-            result = midi_rearrange.rearrange_file(
-                raw, job.directory / 'out.rearranged.mid', **job.rearrange)
-            job.rearranged_path = result.path
-            job.rearrange_detail = result.detail()
-            job.log('整理版 MIDI: {}'.format(result.path.name))
+        if job.score:
+            job.log('生成打谱版…')
+            try:
+                from transkun_app.score import (ScoreOptions,
+                                                generate_score_from_events)
+                options = ScoreOptions(**job.score)
+                result = generate_score_from_events(
+                    events, job.directory / 'out.score', options)
+                job.score_musicxml = result.musicxml
+                job.score_pdf = result.pdf
+                job.score_midi = result.midi
+                job.score_detail = result.detail()
+                job.score_meta = result.metadata
+                job.score_stats = result.stats
+                job.log('打谱版: MusicXML={} PDF={}'.format(
+                    result.musicxml.name if result.musicxml else '-',
+                    result.pdf.name if result.pdf else '-'))
+                for warning in result.warnings:
+                    job.log('打谱提示: {}'.format(warning))
+            except Exception as exc:  # noqa: BLE001 - 打谱失败不影响 MIDI
+                job.score_error = '{}: {}'.format(type(exc).__name__, exc)
+                job.log('打谱失败: {}'.format(job.score_error))
 
     return runner

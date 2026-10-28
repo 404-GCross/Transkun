@@ -99,7 +99,8 @@ grep -v -E '^(torch|torchaudio)[[:space:]]*$' "$ROOT/requirements.txt" \
   > "$WORK/requirements-no-torch.txt"
 "$UV_BIN" pip install --python "$VENV_PY" -r "$WORK/requirements-no-torch.txt"
 "$UV_BIN" pip install --python "$VENV_PY" \
-  fastapi uvicorn python-multipart soundfile mido
+  fastapi uvicorn python-multipart soundfile mido \
+  music21 verovio cairosvg pikepdf
 "$UV_BIN" pip install --python "$VENV_PY" --no-deps "$ROOT[app]"
 # 清掉 setuptools 就地构建的产物。
 rm -rf "$ROOT/build" "$ROOT"/*.egg-info "$ROOT"/transkun/*.egg-info
@@ -323,7 +324,7 @@ chmod 755 "$RES/gui/"*.sh "$RES/run.sh" 2>/dev/null || true
 # ---------------------------------------------------------------- 自检
 log "自检（导入 + 后处理）…"
 "$VENV_PY" -m transkun_app.import_check || die "包内依赖不完整。"
-"$VENV_PY" -m transkun_app.midi_rearrange --selftest
+"$VENV_PY" -m transkun_app.score.selftest --no-pdf
 
 # ---------------------------------------------------------------- 签名（可选）
 # 没有 Apple Developer 账号时只能做 ad-hoc 签名：用户首次打开仍需「右键 → 打开」。

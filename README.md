@@ -7,8 +7,8 @@ MIT）的 fork，由 [404-GCross](https://github.com/404-GCross/Transkun) 维护
 - **命令行**：`transkun-app song.mp3 -o song.mid`（批量、后处理、设备选择）
 - **浏览器 WebUI**：`transkun-app --web --lan`，手机/平板/Mac 打开终端打印的带令牌
   链接即可用；服务端排队、取消、重新转谱、下载原始/整理版 MIDI
-- **MIDI 整理（后处理）**：删弱音、删极短音、合并重复起音与琶音，默认关闭，结果另存
-  `.rearranged.mid`，保留延音踏板 CC64
+- **打谱版**：把演奏事件降维成可读的钢琴缩编谱，输出 MusicXML / PDF / score MIDI，
+  演奏版 MIDI 保留；调性、拍号、速度可自动估计或手动指定
 - **桌面界面**：`transkun-app` 打开 Tk 窗口（选文件、设备、后处理、进度、日志）
 - **安装包**：deb/rpm/AppImage/dmg、一键 `install.sh`（见 [PACKAGING.md](PACKAGING.md)）
 
@@ -29,13 +29,15 @@ python3 -m venv .venv
 
 # 应用 CLI（支持 m4a/opus 等格式、进度、批量、后处理）
 .venv/bin/transkun-app song.mp3 -o song.mid
-.venv/bin/transkun-app song.mp3 --rearrange
+.venv/bin/transkun-app song.mp3 -o song.mid --score
+.venv/bin/transkun-score song.mid -o song.score
 
 # WebUI：手机浏览器可用
 .venv/bin/transkun-app --web --lan
 ```
 
-桌面版（deb/rpm/AppImage/dmg）与一键安装脚本见 [PACKAGING.md](PACKAGING.md)。
+桌面版（deb/rpm/AppImage/dmg）与一键安装脚本见 [PACKAGING.md](PACKAGING.md)；
+打谱版的参数、模式和 AI 规划见 [SCORE.md](SCORE.md)；第三方许可证见 [THIRD_PARTY.md](THIRD_PARTY.md)。
 
 WebUI 默认端口 8765，令牌保存在 `~/.config/transkun/web_token`。**没有令牌连本机也
 打不开**（防止任意网页 POST 本机端口）；明文 HTTP，只应在局域网使用，不要做端口转发。
@@ -46,7 +48,8 @@ WebUI 默认端口 8765，令牌保存在 `~/.config/transkun/web_token`。**没
 
 ```bash
 .venv/bin/transkun-app --check          # 依赖 + 权重，几秒
-.venv/bin/transkun-app --rearrange-only # MIDI 整理，19 项
+.venv/bin/transkun-app --score-selftest  # 打谱版，合成音符
+.venv/bin/transkun-score --selftest     # 同上（独立命令）
 .venv/bin/transkun-app --selftest       # 合成音频 → 模型 → MIDI，约 1 分钟
 .venv/bin/transkun-app --check-fonts    # Tk 中文字体（需要显示器，CI 用 xvfb）
 python -m transkun_app.webui.selftest   # WebUI 接口，50 项，不需要模型
@@ -378,5 +381,5 @@ url={https://openreview.net/forum?id=AzB2Pq7UFsA}
 ## License
 
 上游 Transkun 与本 fork 均为 MIT（见 [LICENSE](LICENSE)）。`transkun_app/` 中
-WebUI 与 MIDI 整理的骨架改编自 404-GCross 的 MT3 Transcriber 项目（Apache-2.0），
+WebUI 骨架改编自 404-GCross 的 MT3 Transcriber 项目（Apache-2.0），
 文件头保留了来源说明。

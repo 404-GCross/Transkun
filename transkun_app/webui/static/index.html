@@ -58,29 +58,70 @@
           </div>
 
           <div class="switchrow">
-            <label class="switch"><input type="checkbox" id="rearrange"><i></i></label>
-            <span class="label"><b>MIDI 整理</b><span>另存 <code>.rearranged.mid</code>，原文件保留</span></span>
+            <label class="switch"><input type="checkbox" id="score"><i></i></label>
+            <span class="label"><b>生成打谱版</b><span>另存 <code>.score.musicxml</code> / <code>.score.pdf</code>，演奏 MIDI 保留</span></span>
           </div>
 
-          <div class="fields">
+          <div class="scorefields" id="scoreFields" hidden>
             <div class="field">
-              <label for="velocity">力度阈值（≤ 即删除）</label>
-              <div class="box"><input type="number" id="velocity" min="0" max="127" step="1" value="30"><i>/ 127</i></div>
+              <label for="scoreMode">打谱模式</label>
+              <select id="scoreMode" class="select">
+                <option value="block">缩编版 · 和弦块 + 琶音记号</option>
+                <option value="faithful">保留版 · 不删内声部</option>
+              </select>
             </div>
             <div class="field">
-              <label for="minMs">最小时值</label>
-              <div class="box"><input type="number" id="minMs" min="0" step="1" value="30"><i>ms</i></div>
+              <label for="scoreKey">调性</label>
+              <select id="scoreKey" class="select">
+                <option value="auto">自动估计</option>
+                <option value="C">C 大调</option>
+                <option value="G">G 大调</option>
+                <option value="D">D 大调</option>
+                <option value="A">A 大调</option>
+                <option value="E">E 大调</option>
+                <option value="B">B 大调</option>
+                <option value="F#">F# 大调</option>
+                <option value="F">F 大调</option>
+                <option value="Bb">Bb 大调</option>
+                <option value="Eb">Eb 大调</option>
+                <option value="Ab">Ab 大调</option>
+                <option value="Db">Db 大调</option>
+                <option value="Am">a 小调</option>
+                <option value="Em">e 小调</option>
+                <option value="Bm">b 小调</option>
+                <option value="F#m">f# 小调</option>
+                <option value="Dm">d 小调</option>
+                <option value="Gm">g 小调</option>
+                <option value="Cm">c 小调</option>
+                <option value="Fm">f 小调</option>
+              </select>
             </div>
             <div class="field">
-              <label for="chordMs">琶音整合窗口</label>
-              <div class="box"><input type="number" id="chordMs" min="0" step="1" value="60"><i>ms</i></div>
+              <label for="scoreTime">拍号</label>
+              <select id="scoreTime" class="select">
+                <option value="auto">自动（保守用 4/4）</option>
+                <option value="4/4">4/4</option>
+                <option value="3/4">3/4</option>
+                <option value="2/4">2/4</option>
+                <option value="6/8">6/8</option>
+                <option value="3/8">3/8</option>
+              </select>
             </div>
             <div class="field">
-              <label for="repeatMs">连续消除窗口</label>
-              <div class="box"><input type="number" id="repeatMs" min="0" step="1" value="120"><i>ms</i></div>
+              <label for="scoreBpm">速度</label>
+              <div class="box"><input type="number" id="scoreBpm" min="20" max="300" step="1" placeholder="自动"><i>BPM</i></div>
+            </div>
+            <div class="field">
+              <label for="scoreTitle">乐谱标题（可选）</label>
+              <div class="box"><input type="text" id="scoreTitle" placeholder="默认与文件名相同"></div>
+            </div>
+            <div class="field">
+              <label for="scoreComposer">作曲者（可选）</label>
+              <div class="box"><input type="text" id="scoreComposer" placeholder="例如 Debussy"></div>
             </div>
           </div>
-          <p class="hint" id="rearrangeHint"></p>
+          <label class="check scorecheck" id="scorePdfRow" hidden><input type="checkbox" id="scorePdf" checked> 同时生成 PDF（渲染依赖缺失时保留 MusicXML/SVG）</label>
+          <p class="hint" id="scoreHint"></p>
 
           <div class="startbox">
             <span class="muted" id="selectedInfo">还没有选择文件</span>

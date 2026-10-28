@@ -159,12 +159,15 @@ function fillInfo(info) {
 
   fillLimits(info.limits || {});
 
-  const defaults = info.rearrange_defaults || {};
-  if (defaults.velocity !== undefined) $('velocity').value = defaults.velocity;
-  if (defaults.min_ms !== undefined) $('minMs').value = defaults.min_ms;
-  if (defaults.chord_ms !== undefined) $('chordMs').value = defaults.chord_ms;
-  if (defaults.repeat_ms !== undefined) $('repeatMs').value = defaults.repeat_ms;
-  updateHint();
+  const defaults = info.score_defaults || {};
+  if (defaults.mode) $('scoreMode').value = defaults.mode;
+  if (defaults.key) $('scoreKey').value = defaults.key;
+  if (defaults.time_signature) $('scoreTime').value = defaults.time_signature;
+  if (defaults.bpm !== undefined && defaults.bpm !== null) {
+    $('scoreBpm').value = defaults.bpm;
+  }
+  if (defaults.pdf !== undefined) $('scorePdf').checked = Boolean(defaults.pdf);
+  updateScoreHint();
 }
 
 function fillLimits(limits) {
@@ -179,13 +182,23 @@ function fillLimits(limits) {
   )));
 }
 
-function updateHint() {
+function updateScoreHint() {
+  const on = $('score').checked;
+  $('scoreFields').hidden = !on;
+  $('scorePdfRow').hidden = !on;
   const parts = [];
-  if (!$('rearrange').checked) {
-    parts.push('不勾选 MIDI 整理时只输出原始 .mid；勾选后会另存一份 .rearranged.mid，原文件保留。');
+  if (!on) {
+    parts.push('不生成打谱版时只输出演奏 MIDI；打谱版是可选步骤。');
+  } else {
+    const mode = $('scoreMode').value;
+    parts.push(mode === 'faithful'
+      ? '保留版：不删内声部，保留全部音符，只做量化与左右手分离。'
+      : '缩编版：同格起音合并成和弦，清理不可演奏内声部，滚奏加琶音记号。');
+    if ($('scoreTime').value === 'auto') {
+      parts.push('自动拍号暂时保守用 4/4；3/4、6/8 请手动指定。');
+    }
   }
-  parts.push('转谱会保留模型预测的延音踏板（CC64）。');
-  $('rearrangeHint').textContent = parts.join(' ');
+  $('scoreHint').textContent = parts.join(' ');
 }
 
 // ------------------------------------------------------------------ 文件选择
@@ -225,11 +238,14 @@ function uploadOne(file, index, total) {
     const form = new FormData();
     form.append('file', file);
     form.append('model', MODEL);
-    form.append('rearrange', $('rearrange').checked ? 'true' : 'false');
-    form.append('velocity', $('velocity').value || '30');
-    form.append('min_ms', $('minMs').value || '30');
-    form.append('chord_ms', $('chordMs').value || '60');
-    form.append('repeat_ms', $('repeatMs').value || '120');
+    form.append('score', $('score').checked ? 'true' : 'false');
+    form.append('score_mode', $('scoreMode').value || 'block');
+    form.append('score_key', $('scoreKey').value || 'auto');
+    form.append('score_time_signature', $('scoreTime').value || 'auto');
+    form.append('score_bpm', $('scoreBpm').value || '');
+    form.append('score_pdf', $('scorePdf').checked ? 'true' : 'false');
+    form.append('score_title', $('scoreTitle').value || '');
+    form.append('score_composer', $('scoreComposer').value || '');
 
     const xhr = new XMLHttpRequest();
     state.xhr = xhr;
@@ -388,12 +404,19 @@ function renderJob(job) {
     }
   }
 
+  const score = job.score || {};
   const acts = [];
   if (job.raw) {
-    acts.push(el('a', { class: 'btn small', href: `/api/jobs/${job.id}/midi?kind=raw`, download: '' }, '原始 MIDI'));
+    acts.push(el('a', { class: 'btn small', href: `/api/jobs/${job.id}/midi?kind=raw`, download: '' }, '演奏 MIDI'));
   }
-  if (job.rearranged) {
-    acts.push(el('a', { class: 'btn small soft', href: `/api/jobs/${job.id}/midi?kind=rearranged`, download: '' }, '整理版'));
+  if (score.musicxml) {
+    acts.push(el('a', { class: 'btn small soft', href: `/api/jobs/${job.id}/score?kind=musicxml`, download: '' }, 'MusicXML'));
+  }
+  if (score.pdf) {
+    acts.push(el('a', { class: 'btn small soft', href: `/api/jobs/${job.id}/score?kind=pdf`, download: '' }, 'PDF'));
+  }
+  if (score.midi) {
+    acts.push(el('a', { class: 'btn small ghost', href: `/api/jobs/${job.id}/midi?kind=score`, download: '' }, '打谱 MIDI'));
   }
   if (job.status === 'queued' || job.status === 'running') {
     acts.push(el('button', { class: 'btn small ghost', type: 'button', text: '取消', onclick: () => cancelJob(job.id).catch((err) => alert(err.message)) }));
@@ -409,11 +432,34 @@ function renderJob(job) {
   }
 
   const line2 = el('div', { class: 'line2' }, ...info);
-  if (job.rearrange_detail) {
-    line2.append(el('span', { text: `· ${job.rearrange_detail}` }));
-  }
   line2.append(el('span', { class: 'acts' }, ...acts));
   row.append(line2);
+
+  const scoreBits = [];
+  if (score.meta) {
+    const key = score.meta.key && score.meta.key.name
+      ? score.meta.key.name : '';
+    if (key) scoreBits.push(el('span', {}, '调性 ', el('b', { text: key })));
+    if (score.meta.time_signature) {
+      scoreBits.push(el('span', {}, '拍号 ',
+        el('b', { text: score.meta.time_signature })));
+    }
+    if (score.meta.bpm) {
+      scoreBits.push(el('span', {}, 'BPM ',
+        el('b', { text: String(Math.round(score.meta.bpm)) })));
+    }
+  }
+  if (score.detail) {
+    const detail = score.detail.split('｜')
+      .filter((part) => !part.startsWith('调性')).join('｜');
+    if (detail) scoreBits.push(el('span', { text: detail }));
+  }
+  if (scoreBits.length) {
+    row.append(el('div', { class: 'scoremeta' }, ...scoreBits));
+  }
+  if (score.error) {
+    row.append(el('div', { class: 'error', text: `打谱失败：${score.error}` }));
+  }
 
   if (job.error) {
     row.append(el('div', { class: 'error', text: job.error }));
@@ -439,11 +485,14 @@ function renderJobs(jobs) {
 async function retryJob(id) {
   const query = new URLSearchParams({
     model: MODEL,
-    rearrange: $('rearrange').checked ? 'true' : 'false',
-    velocity: $('velocity').value || '30',
-    min_ms: $('minMs').value || '30',
-    chord_ms: $('chordMs').value || '60',
-    repeat_ms: $('repeatMs').value || '120',
+    score: $('score').checked ? 'true' : 'false',
+    score_mode: $('scoreMode').value || 'block',
+    score_key: $('scoreKey').value || 'auto',
+    score_time_signature: $('scoreTime').value || 'auto',
+    score_bpm: $('scoreBpm').value || '',
+    score_pdf: $('scorePdf').checked ? 'true' : 'false',
+    score_title: $('scoreTitle').value || '',
+    score_composer: $('scoreComposer').value || '',
   });
   await apiJson(await api(`/api/jobs/${id}/retry?${query}`, { method: 'POST' }));
   await refreshJobs();
@@ -518,7 +567,9 @@ function bind() {
   $('abortUpload').addEventListener('click', () => {
     if (state.xhr) state.xhr.abort();
   });
-  $('rearrange').addEventListener('change', updateHint);
+  $('score').addEventListener('change', updateScoreHint);
+  $('scoreMode').addEventListener('change', updateScoreHint);
+  $('scoreTime').addEventListener('change', updateScoreHint);
   $('theme').addEventListener('click', toggleTheme);
 
   for (const type of ['dragover', 'drop']) {
@@ -538,7 +589,7 @@ async function main() {
   $('formats').replaceChildren(...FORMATS.map((ext) => el('span', { class: 'fmt', text: ext })));
   bind();
   updateFileBar();
-  updateHint();
+  updateScoreHint();
   try {
     const response = await api('/api/info');
     fillInfo(await response.json());

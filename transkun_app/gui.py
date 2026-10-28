@@ -40,22 +40,26 @@ else:
         ('cpu', 'CPU'),
     ]
 
-REARRANGE_FIELDS = [
-    ('velocity', '最低力度', '0-127'),
-    ('min_ms', '最低时值', 'ms'),
-    ('chord_ms', '琶音整合', 'ms'),
-    ('repeat_ms', '连续消除', 'ms'),
+SCORE_MODE_CHOICES = [
+    ('block', '缩编版（和弦块 + 琶音记号）'),
+    ('faithful', '保留版（不删内声部）'),
 ]
 
-REARRANGE_DEFAULTS = {
-    'enabled': False,
-    'velocity': 30,
-    'min_ms': 30,
-    'chord_ms': 60,
-    'repeat_ms': 120,
-}
+SCORE_KEY_CHOICES = [
+    ('auto', '自动'),
+    ('C', 'C'), ('G', 'G'), ('D', 'D'), ('A', 'A'), ('E', 'E'),
+    ('B', 'B'), ('F#', 'F#'), ('F', 'F'), ('Bb', 'Bb'), ('Eb', 'Eb'),
+    ('Ab', 'Ab'), ('Db', 'Db'),
+    ('Am', 'Am'), ('Em', 'Em'), ('Bm', 'Bm'), ('F#m', 'F#m'),
+    ('Dm', 'Dm'), ('Gm', 'Gm'), ('Cm', 'Cm'), ('Fm', 'Fm'),
+]
 
-REARRANGE_HINT = '后处理结果另存为 xxx.rearranged.mid，不覆盖原始转谱文件。'
+SCORE_TIME_CHOICES = [
+    ('auto', '自动'), ('4/4', '4/4'), ('3/4', '3/4'),
+    ('2/4', '2/4'), ('6/8', '6/8'), ('3/8', '3/8'),
+]
+
+SCORE_HINT = '演奏 MIDI 保留；打谱版另存 .score.musicxml / .score.pdf。'
 
 CONFIG_DIR = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'transkun'
 CONFIG_FILE = CONFIG_DIR / 'config.json'
@@ -228,7 +232,9 @@ class TranskunApp:
         self.busy = False
         self.cancel_event = threading.Event()
         self.last_output = None
-        self.last_rearranged = None
+        self.last_score_musicxml = None
+        self.last_score_pdf = None
+        self.last_score_midi = None
         self.config = load_config()
 
         root = tk.Tk()
@@ -248,14 +254,24 @@ class TranskunApp:
         self.output_var = tk.StringVar()
         self.status_var = tk.StringVar(value='就绪')
 
-        self.rearrange_enabled = tk.BooleanVar(
-            value=bool(self.config.get('rearrange_enabled',
-                                       REARRANGE_DEFAULTS['enabled'])))
-        self.rearrange_vars = {}
-        for key, _, _ in REARRANGE_FIELDS:
-            self.rearrange_vars[key] = tk.StringVar(
-                value=str(self.config.get(f'rearrange_{key}',
-                                          REARRANGE_DEFAULTS[key])))
+        self.score_enabled = tk.BooleanVar(
+            value=bool(self.config.get('score_enabled', False)))
+        self.score_mode = tk.StringVar(
+            value=self.config.get('score_mode', 'block'))
+        if self.score_mode.get() not in [v for v, _ in SCORE_MODE_CHOICES]:
+            self.score_mode.set('block')
+        self.score_key = tk.StringVar(
+            value=self.config.get('score_key', 'auto'))
+        if self.score_key.get() not in [v for v, _ in SCORE_KEY_CHOICES]:
+            self.score_key.set('auto')
+        self.score_time = tk.StringVar(
+            value=self.config.get('score_time', 'auto'))
+        if self.score_time.get() not in [v for v, _ in SCORE_TIME_CHOICES]:
+            self.score_time.set('auto')
+        self.score_bpm = tk.StringVar(
+            value=str(self.config.get('score_bpm', '') or ''))
+        self.score_pdf = tk.BooleanVar(
+            value=bool(self.config.get('score_pdf', True)))
 
         main = ttk.Frame(root, padding=10)
         main.pack(fill='both', expand=True)
@@ -289,21 +305,40 @@ class TranskunApp:
         ttk.Label(options, text='（留空 = 自动）').pack(side='left', padx=(4, 0))
         row += 1
 
-        post = ttk.LabelFrame(main, text='后处理（MIDI 整理，可选）')
+        post = ttk.LabelFrame(main, text='打谱版（MusicXML / PDF，可选）')
         post.grid(row=row, column=0, columnspan=3, sticky='ew', pady=(10, 0))
         row += 1
-        ttk.Checkbutton(post, text='启用（转谱后自动整理）',
-                        variable=self.rearrange_enabled).grid(
+        ttk.Checkbutton(post, text='转谱后生成打谱版',
+                        variable=self.score_enabled).grid(
             row=0, column=0, columnspan=2, sticky='w', padx=10, pady=(4, 2))
-        for index, (key, label, unit) in enumerate(REARRANGE_FIELDS):
-            cell = ttk.Frame(post)
-            cell.grid(row=1 + index // 2, column=index % 2, sticky='w',
-                      padx=10, pady=(0, 2))
-            ttk.Label(cell, text=f'{label}（{unit}）').pack(side='left')
-            ttk.Entry(cell, textvariable=self.rearrange_vars[key], width=7).pack(
-                side='left', padx=(4, 0))
-        ttk.Label(post, text=REARRANGE_HINT).grid(
-            row=3, column=0, columnspan=2, sticky='w', padx=10, pady=(0, 6))
+        cell = ttk.Frame(post)
+        cell.grid(row=1, column=0, sticky='w', padx=10, pady=(0, 2))
+        ttk.Label(cell, text='模式：').pack(side='left')
+        ttk.Combobox(cell, textvariable=self.score_mode, state='readonly',
+                     values=[label for _, label in SCORE_MODE_CHOICES],
+                     width=26).pack(side='left', padx=(4, 0))
+        cell = ttk.Frame(post)
+        cell.grid(row=1, column=1, sticky='w', padx=10, pady=(0, 2))
+        ttk.Label(cell, text='调性：').pack(side='left')
+        ttk.Combobox(cell, textvariable=self.score_key, state='readonly',
+                     values=[label for _, label in SCORE_KEY_CHOICES],
+                     width=8).pack(side='left', padx=(4, 0))
+        cell = ttk.Frame(post)
+        cell.grid(row=2, column=0, sticky='w', padx=10, pady=(0, 2))
+        ttk.Label(cell, text='拍号：').pack(side='left')
+        ttk.Combobox(cell, textvariable=self.score_time, state='readonly',
+                     values=[label for _, label in SCORE_TIME_CHOICES],
+                     width=8).pack(side='left', padx=(4, 0))
+        cell = ttk.Frame(post)
+        cell.grid(row=2, column=1, sticky='w', padx=10, pady=(0, 2))
+        ttk.Label(cell, text='BPM：').pack(side='left')
+        ttk.Entry(cell, textvariable=self.score_bpm, width=7).pack(
+            side='left', padx=(4, 0))
+        ttk.Label(cell, text='（留空 = 自动）').pack(side='left', padx=(4, 0))
+        ttk.Checkbutton(post, text='生成 PDF', variable=self.score_pdf).grid(
+            row=3, column=0, sticky='w', padx=10, pady=(0, 2))
+        ttk.Label(post, text=SCORE_HINT).grid(
+            row=4, column=0, columnspan=2, sticky='w', padx=10, pady=(0, 6))
 
         buttons = ttk.Frame(main)
         buttons.grid(row=row, column=0, columnspan=3, sticky='ew', pady=(12, 6))
@@ -321,14 +356,14 @@ class TranskunApp:
             buttons, text='打开 MIDI', command=self.on_open_midi,
             state='disabled')
         self.open_midi_button.pack(side='left', padx=(8, 0))
-        self.rearrange_button = ttk.Button(
-            buttons, text='整理当前 MIDI…', command=self.on_rearrange_current,
+        self.open_musicxml_button = ttk.Button(
+            buttons, text='打开 MusicXML', command=self.on_open_musicxml,
             state='disabled')
-        self.rearrange_button.pack(side='left', padx=(8, 0))
-        self.open_rearranged_button = ttk.Button(
-            buttons, text='打开整理版', command=self.on_open_rearranged,
+        self.open_musicxml_button.pack(side='left', padx=(8, 0))
+        self.open_score_pdf_button = ttk.Button(
+            buttons, text='打开 PDF', command=self.on_open_score_pdf,
             state='disabled')
-        self.open_rearranged_button.pack(side='left', padx=(8, 0))
+        self.open_score_pdf_button.pack(side='left', padx=(8, 0))
         row += 1
 
         self.progress = ttk.Progressbar(main, mode='determinate', maximum=100)
@@ -391,10 +426,13 @@ class TranskunApp:
         values = {
             'device': self.device_var.get(),
             'threads': threads,
-            'rearrange_enabled': bool(self.rearrange_enabled.get()),
+            'score_enabled': bool(self.score_enabled.get()),
+            'score_mode': self.score_mode.get(),
+            'score_key': self.score_key.get(),
+            'score_time': self.score_time.get(),
+            'score_bpm': self.score_bpm.get().strip(),
+            'score_pdf': bool(self.score_pdf.get()),
         }
-        for key, value in self.rearrange_params().items():
-            values[f'rearrange_{key}'] = value
         save_config(values)
 
     def on_browse_input(self):
@@ -424,54 +462,13 @@ class TranskunApp:
         if self.last_output and Path(self.last_output).exists():
             open_path(self.last_output)
 
-    def on_open_rearranged(self):
-        if self.last_rearranged and Path(self.last_rearranged).exists():
-            open_path(self.last_rearranged)
+    def on_open_musicxml(self):
+        if self.last_score_musicxml and Path(self.last_score_musicxml).exists():
+            open_path(self.last_score_musicxml)
 
-    # ------------------------------------------------------------------ 后处理
-
-    def rearrange_params(self):
-        limits = {'velocity': (0, 127), 'min_ms': (0, 10000),
-                  'chord_ms': (0, 10000), 'repeat_ms': (0, 10000)}
-        values = {}
-        for key, (low, high) in limits.items():
-            try:
-                value = int(float(self.rearrange_vars[key].get().strip()))
-            except ValueError:
-                value = REARRANGE_DEFAULTS[key]
-            value = max(low, min(high, value))
-            self.rearrange_vars[key].set(str(value))
-            values[key] = value
-        values['drums'] = False
-        return values
-
-    def on_rearrange_current(self):
-        """对上一次转谱结果再整理一次，不必重新转谱。"""
-        if self.busy:
-            return
-        target = self.last_output or self.output_var.get().strip()
-        if not target or not Path(target).exists():
-            self.messagebox.showerror('错误', '还没有可整理的 MIDI，请先转谱。')
-            return
-        params = self.rearrange_params()
-        self.persist_config()
-        self.busy = True
-        self.start_button.configure(state='disabled')
-        self.rearrange_button.configure(state='disabled')
-        self.set_progress(0, None)
-        self.status_var.set('正在整理 MIDI…')
-        self.log(f'整理: {target}')
-
-        def work():
-            try:
-                import transkun_app.midi_rearrange as midi_rearrange
-                self.queue.put(('rearrange_done',
-                                midi_rearrange.rearrange_file(target, **params)))
-            except Exception as exc:  # noqa: BLE001
-                self.queue.put(('error', f'{type(exc).__name__}: {exc}',
-                                traceback.format_exc()))
-
-        threading.Thread(target=work, daemon=True).start()
+    def on_open_score_pdf(self):
+        if self.last_score_pdf and Path(self.last_score_pdf).exists():
+            open_path(self.last_score_pdf)
 
     # ------------------------------------------------------------------ 转谱
 
@@ -498,19 +495,38 @@ class TranskunApp:
         self.cancel_button.configure(state='normal')
         self.open_dir_button.configure(state='disabled')
         self.open_midi_button.configure(state='disabled')
-        self.rearrange_button.configure(state='disabled')
+        self.open_musicxml_button.configure(state='disabled')
+        self.open_score_pdf_button.configure(state='disabled')
         self.set_progress(0, None)
         self.status_var.set('准备中…')
         self.log('=' * 60)
         self.log(f'输入: {audio}')
         self.log(f'输出: {output}')
 
-        rearrange_params = None
-        if self.rearrange_enabled.get():
-            rearrange_params = self.rearrange_params()
-            self.log('后处理: 已启用（' + '，'.join(
-                f'{label}={rearrange_params[key]}'
-                for key, label, _ in REARRANGE_FIELDS) + '）')
+        score_options = None
+        if self.score_enabled.get():
+            from transkun_app.score import ScoreOptions
+            bpm = None
+            if self.score_bpm.get().strip():
+                try:
+                    bpm = float(self.score_bpm.get())
+                except ValueError:
+                    self.score_bpm.set('')
+            score_options = ScoreOptions(
+                mode=dict((label, value) for value, label in
+                          SCORE_MODE_CHOICES).get(self.score_mode.get(),
+                                                  self.score_mode.get()),
+                key=dict((label, value) for value, label in
+                         SCORE_KEY_CHOICES).get(self.score_key.get(),
+                                                self.score_key.get()),
+                time_signature=dict((label, value) for value, label in
+                                    SCORE_TIME_CHOICES).get(
+                                        self.score_time.get(),
+                                        self.score_time.get()),
+                bpm=bpm, pdf=bool(self.score_pdf.get()))
+            self.log('打谱版: 已启用（' + score_options.mode + '，调性 '
+                     + score_options.key + '，拍号 '
+                     + score_options.time_signature + '）')
 
         device = dict((label, value) for value, label in DEVICE_CHOICES).get(
             self.device_var.get(), self.device_var.get())
@@ -523,7 +539,7 @@ class TranskunApp:
 
         threading.Thread(
             target=self.worker,
-            args=(audio, output, device, threads, rearrange_params),
+            args=(audio, output, device, threads, score_options),
             daemon=True).start()
 
     def on_cancel(self):
@@ -534,13 +550,12 @@ class TranskunApp:
 
     # ------------------------------------------------------------------ 后台线程
 
-    def worker(self, audio, output, device, threads, rearrange_params=None):
+    def worker(self, audio, output, device, threads, score_options=None):
         q = self.queue
         start = time.time()
         try:
             q.put(('status', '正在加载依赖与模型（首次较慢）…'))
             from transkun_app import backend
-            import transkun_app.midi_rearrange as midi_rearrange
 
             transcriber = backend.get_transcriber(
                 device=device, threads=threads)
@@ -563,14 +578,17 @@ class TranskunApp:
             notes = backend.note_count(events)
             pedals = backend.pedal_count(events)
 
-            rearranged = None
-            if rearrange_params is not None:
-                q.put(('status', '正在整理 MIDI（后处理）…'))
-                rearranged = midi_rearrange.rearrange_file(
-                    output, **rearrange_params)
+            score_result = None
+            if score_options is not None:
+                q.put(('status', '正在生成打谱版…'))
+                from transkun_app.score import generate_score_from_events
+                base = Path(output).with_suffix('').with_name(
+                    Path(output).stem + '.score')
+                score_result = generate_score_from_events(
+                    events, base, score_options)
 
             q.put(('done', output, notes, pedals,
-                   time.time() - start, rearranged))
+                   time.time() - start, score_result))
         except Cancelled:
             q.put(('cancelled',))
         except Exception as exc:  # noqa: BLE001 - surfaced to the UI
@@ -601,23 +619,32 @@ class TranskunApp:
             else:
                 self.status_var.set(f'正在转谱… 已处理 {done} 个片段')
         elif kind == 'done':
-            _, output, notes, pedals, elapsed, rearranged = message
+            _, output, notes, pedals, elapsed, score_result = message
             self.finish()
             self.last_output = output
             self.open_dir_button.configure(state='normal')
             self.open_midi_button.configure(state='normal')
-            self.rearrange_button.configure(state='normal')
             self.status_var.set(f'完成：{notes} 个音符')
             self.log(f'完成：{notes} 个音符，{pedals} 段踏板，'
                      f'耗时 {elapsed:.1f} 秒')
             self.log(f'MIDI 已保存: {output}')
             extra = ''
-            if rearranged is not None:
-                self.last_rearranged = str(rearranged.path)
-                self.open_rearranged_button.configure(state='normal')
-                self.log(f'整理版 MIDI: {rearranged.path}')
-                self.log('后处理: ' + rearranged.detail())
-                extra = f'\n\n整理版：\n{rearranged.path}\n{rearranged.summary()}'
+            if score_result is not None:
+                if score_result.musicxml:
+                    self.last_score_musicxml = str(score_result.musicxml)
+                    self.open_musicxml_button.configure(state='normal')
+                    self.log(f'MusicXML: {score_result.musicxml}')
+                if score_result.pdf:
+                    self.last_score_pdf = str(score_result.pdf)
+                    self.open_score_pdf_button.configure(state='normal')
+                    self.log(f'PDF: {score_result.pdf}')
+                if score_result.midi:
+                    self.last_score_midi = str(score_result.midi)
+                for warning in score_result.warnings:
+                    self.log(f'打谱提示: {warning}')
+                extra = (f'\n\n打谱版：\n{score_result.musicxml}\n'
+                         f'{score_result.pdf or ""}\n'
+                         f'{score_result.detail()}')
             self.messagebox.showinfo(
                 '转谱完成',
                 f'已生成 MIDI：\n{output}\n\n'
@@ -627,16 +654,6 @@ class TranskunApp:
             self.finish()
             self.status_var.set('已取消')
             self.log('已取消（未生成 MIDI）。')
-        elif kind == 'rearrange_done':
-            result = message[1]
-            self.finish()
-            self.last_rearranged = str(result.path)
-            self.open_rearranged_button.configure(state='normal')
-            self.status_var.set('MIDI 整理完成')
-            self.log(f'整理版 MIDI: {result.path}')
-            self.log('后处理: ' + result.detail())
-            self.messagebox.showinfo(
-                '整理完成', f'已生成：\n{result.path}\n\n{result.summary()}')
         elif kind == 'error':
             _, summary, details = message
             self.finish()
@@ -654,8 +671,14 @@ class TranskunApp:
         self.cancel_button.configure(state='disabled')
         self.progress.stop()
         self.progress.configure(mode='determinate')
-        ready = bool(self.last_output) and Path(self.last_output).exists()
-        self.rearrange_button.configure(state='normal' if ready else 'disabled')
+        if self.last_score_musicxml:
+            self.open_musicxml_button.configure(
+                state='normal' if Path(self.last_score_musicxml).exists()
+                else 'disabled')
+        if self.last_score_pdf:
+            self.open_score_pdf_button.configure(
+                state='normal' if Path(self.last_score_pdf).exists()
+                else 'disabled')
 
     def set_progress(self, done, total):
         if total:

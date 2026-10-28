@@ -12,13 +12,16 @@ def test_defaults():
     assert args.audio == 'song.wav'
     assert args.device == 'auto'
     assert args.port == 8765
-    assert args.rearrange is False
+    assert args.score is False
 
 
-def test_rearrange_defaults():
-    args = cli.build_parser().parse_args(['song.wav', '--rearrange'])
-    assert (args.rearrange_velocity, args.rearrange_min_ms,
-            args.rearrange_chord_ms, args.rearrange_repeat_ms) == (30, 30, 60, 120)
+def test_score_defaults():
+    args = cli.build_parser().parse_args(['song.wav', '--score'])
+    assert args.score is True
+    assert args.score_mode == 'block'
+    assert args.score_key == 'auto'
+    assert args.score_time_signature == 'auto'
+    assert args.score_no_pdf is False
 
 
 def test_web_and_audio_conflict():
@@ -30,7 +33,7 @@ def test_web_and_audio_conflict():
 def test_version(capsys):
     assert cli.main(['--version']) == 0
     out = capsys.readouterr().out
-    assert 'Transkun 0.2.0' in out
+    assert 'Transkun 0.3.0' in out
     assert '2.0.1' in out
 
 

@@ -181,4 +181,9 @@ if [ "${1:-}" = "--upstream-cli" ]; then
     'import sys; sys.argv[0]="transkun"; from transkun.transcribe import main; main()' "$@"
 fi
 
+if [ "${1:-}" = "--score-cli" ]; then
+  shift
+  exec "$VENV_DIR/bin/python" -m transkun_app.score.cli "$@"
+fi
+
 exec "$VENV_DIR/bin/python" -m transkun_app.cli "$@"

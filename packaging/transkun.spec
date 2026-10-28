@@ -4,7 +4,7 @@ Release: 1%{?dist}
 Summary: Transkun piano transcription (CLI, WebUI, desktop app)
 License: MIT
 BuildArch: x86_64
-Requires: zstd, libsndfile, libX11, libXext, libXft, fontconfig, libXrender, libXScrnSaver
+Requires: zstd, libsndfile, cairo, libX11, libXext, libXft, fontconfig, libXrender, libXScrnSaver
 Recommends: ffmpeg, git, curl
 Source0: transkun.tar.gz
 
@@ -39,8 +39,12 @@ cat > %{buildroot}%{_bindir}/transkun <<'EOF'
 #!/usr/bin/env bash
 exec /usr/share/transkun/run.sh --upstream-cli "$@"
 EOF
+cat > %{buildroot}%{_bindir}/transkun-score <<'EOF'
+#!/usr/bin/env bash
+exec /usr/share/transkun/run.sh --score-cli "$@"
+EOF
 chmod 755 %{buildroot}%{_bindir}/transkun-app %{buildroot}%{_bindir}/transkun \
-  %{buildroot}%{_prefix}/share/transkun/run.sh
+  %{buildroot}%{_bindir}/transkun-score %{buildroot}%{_prefix}/share/transkun/run.sh
 cp %{buildroot}%{_prefix}/share/transkun/packaging/transkun.desktop \
   %{buildroot}%{_datadir}/applications/
 cp %{buildroot}%{_prefix}/share/transkun/packaging/transkun-web.desktop \
@@ -51,6 +55,7 @@ cp %{buildroot}%{_prefix}/share/transkun/packaging/transkun.png \
 %files
 %{_bindir}/transkun
 %{_bindir}/transkun-app
+%{_bindir}/transkun-score
 %{_prefix}/share/transkun
 %{_datadir}/applications/transkun.desktop
 %{_datadir}/applications/transkun-web.desktop

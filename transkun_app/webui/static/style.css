@@ -334,7 +334,7 @@ body {
 
 /* ---------------------------------------------------------------- 选项 */
 
-.models { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.models { display: grid; grid-template-columns: 1fr; gap: 8px; }
 
 .model {
   text-align: left;
@@ -399,6 +399,58 @@ body {
 .switchrow .label b { font-size: 12.5px; font-weight: 600; }
 
 .switchrow .label span { font-size: 11px; color: var(--muted); }
+
+.scorefields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.select {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 7px 9px;
+}
+
+.select:focus { outline: none; border-color: var(--accent); }
+
+.scorecheck { margin-top: 10px; font-size: 11.5px; color: var(--muted); }
+
+.scoremeta {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 4px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.scoremeta b { color: var(--ink); font-weight: 600; }
+
+.scoretag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--ok);
+  background: var(--ok-soft);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-weight: 600;
+}
+
+@media (max-width: 620px) {
+  .scorefields { grid-template-columns: 1fr; }
+}
 
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 12px; }
 

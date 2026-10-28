@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.2.0}"
+VERSION="${VERSION:-0.3.0}"
 ARCH="${ARCH:-amd64}"
 OUT="$ROOT/dist"
 PKG="$ROOT/.package/transkun"
@@ -49,8 +49,12 @@ cat > "$PKG/usr/bin/transkun" <<'EOF'
 #!/usr/bin/env bash
 exec /usr/share/transkun/run.sh --upstream-cli "$@"
 EOF
+cat > "$PKG/usr/bin/transkun-score" <<'EOF'
+#!/usr/bin/env bash
+exec /usr/share/transkun/run.sh --score-cli "$@"
+EOF
 chmod 755 "$PKG/usr/bin/transkun-app" "$PKG/usr/bin/transkun" \
-  "$PKG/usr/share/transkun/run.sh"
+  "$PKG/usr/bin/transkun-score" "$PKG/usr/share/transkun/run.sh"
 cp "$ROOT/packaging/transkun.desktop" "$PKG/usr/share/applications/"
 cp "$ROOT/packaging/transkun-web.desktop" "$PKG/usr/share/applications/"
 cp "$ROOT/packaging/transkun.png" \
@@ -65,7 +69,7 @@ Maintainer: 404-GCross
 Description: Transkun piano transcription (CLI, WebUI, desktop app)
  Piano audio to MIDI with the Transkun 2.0 model, a browser WebUI for LAN use,
  and optional rule-based MIDI cleanup.
-Depends: zstd, ca-certificates, libsndfile1, ffmpeg, libx11-6, libxext6, libxft2, libfontconfig1, libxrender1, libxss1
+Depends: zstd, ca-certificates, libsndfile1, ffmpeg, libcairo2, libx11-6, libxext6, libxft2, libfontconfig1, libxrender1, libxss1
 Recommends: git, curl
 EOF
 cat > "$PKG/DEBIAN/postinst" <<'EOF'

@@ -13,7 +13,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.2.0}"
+VERSION="${VERSION:-0.3.0}"
 ARCH="${ARCH:-x86_64}"
 OUT="$ROOT/dist"
 WORK="$ROOT/.appimage"
@@ -72,7 +72,8 @@ grep -v -E '^(torch|torchaudio)[[:space:]]*$' "$ROOT/requirements.txt" \
   > "$WORK/requirements-no-torch.txt"
 "$UV_BIN" pip install --python "$VENV_PY" -r "$WORK/requirements-no-torch.txt"
 "$UV_BIN" pip install --python "$VENV_PY" \
-  fastapi uvicorn python-multipart soundfile mido
+  fastapi uvicorn python-multipart soundfile mido \
+  music21 verovio cairosvg pikepdf
 "$UV_BIN" pip install --python "$VENV_PY" --no-deps "$SOURCE_DIR[app]"
 # 清掉 setuptools 就地构建留下的产物，别打进 AppImage。
 rm -rf "$SOURCE_DIR/build" "$SOURCE_DIR"/*.egg-info
@@ -204,6 +205,10 @@ if [ "${1:-}" = "--upstream-cli" ]; then
   shift
   exec "$HERE/usr/venv/bin/python" -c \
     'import sys; sys.argv[0]="transkun"; from transkun.transcribe import main; main()' "$@"
+fi
+if [ "${1:-}" = "--score-cli" ]; then
+  shift
+  exec "$HERE/usr/venv/bin/python" -m transkun_app.score.cli "$@"
 fi
 exec "$HERE/usr/venv/bin/python" -m transkun_app.cli "$@"
 EOF

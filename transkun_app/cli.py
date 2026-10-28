@@ -5,8 +5,9 @@
 应用层功能，不会与上游参数冲突：
 
     transkun-app song.mp3 -o song.mid
+    transkun-app song.mp3 -o song.mid --score
     transkun-app --web --lan
-    transkun-app --batch-input ./audio --batch-output ./midi
+    transkun-app --batch-input ./audio --batch-output ./midi --score
     transkun-app --check
 """
 
@@ -22,17 +23,47 @@ from transkun_app import APP_NAME, UPSTREAM_VERSION, __version__
 AUDIO_EXTENSIONS = ('.wav', '.mp3', '.flac', '.ogg', '.m4a', '.aac',
                     '.aiff', '.aif', '.opus')
 
-REARRANGE_DEFAULTS = {
-    'velocity': 30,
-    'min_ms': 30,
-    'chord_ms': 60,
-    'repeat_ms': 120,
-}
-
 
 def _fmt_clock(seconds: float) -> str:
     total = max(0, int(round(seconds)))
     return f'{total // 60}:{total % 60:02d}'
+
+
+def _score_options(args):
+    from transkun_app.score import ScoreOptions
+    return ScoreOptions(
+        mode=args.score_mode,
+        key=args.score_key,
+        time_signature=args.score_time_signature,
+        bpm=args.score_bpm,
+        title=args.score_title,
+        composer=args.score_composer,
+        pdf=not args.score_no_pdf,
+    )
+
+
+def _score_base(output: Path) -> Path:
+    output = Path(output)
+    return output.with_suffix('').with_name(output.stem + '.score')
+
+
+def _run_score(events, output: Path, args) -> bool:
+    from transkun_app.score import generate_score_from_events
+    base = _score_base(output)
+    try:
+        result = generate_score_from_events(events, base, _score_options(args))
+    except Exception as exc:  # noqa: BLE001 - 转谱结果仍然保留
+        print(f'打谱失败: {type(exc).__name__}: {exc}', file=sys.stderr)
+        return False
+    print(f'MusicXML: {result.musicxml}')
+    if result.pdf:
+        print(f'PDF: {result.pdf}')
+    if result.midi:
+        print(f'Score MIDI: {result.midi}')
+    print('打谱统计: ' + result.detail())
+    for warning in result.warnings:
+        print(f'打谱提示: {warning}', file=sys.stderr)
+    return True
 
 
 def _print_result(events, output: Path, elapsed: float, device_info: str):
@@ -48,7 +79,6 @@ def _print_result(events, output: Path, elapsed: float, device_info: str):
 
 def run_cli(args) -> int:
     from transkun_app import backend
-    import transkun_app.midi_rearrange as midi_rearrange
 
     audio = Path(args.audio)
     if not audio.exists():
@@ -82,21 +112,13 @@ def run_cli(args) -> int:
     backend.save_midi(events, output)
     _print_result(events, output, time.time() - start, device_info)
 
-    if args.rearrange:
-        result = midi_rearrange.rearrange_file(
-            output,
-            velocity=args.rearrange_velocity,
-            min_ms=args.rearrange_min_ms,
-            chord_ms=args.rearrange_chord_ms,
-            repeat_ms=args.rearrange_repeat_ms)
-        print(f'整理版 MIDI: {result.path}')
-        print('后处理: ' + result.detail())
+    if args.score:
+        _run_score(events, output, args)
     return 0
 
 
 def run_batch(args) -> int:
     from transkun_app import backend
-    import transkun_app.midi_rearrange as midi_rearrange
 
     input_dir = Path(args.batch_input)
     output_dir = Path(args.batch_output)
@@ -125,21 +147,17 @@ def run_batch(args) -> int:
             continue
         print(f'  -> {output}（{backend.note_count(events)} 个音符，'
               f'{time.time() - start:.1f} 秒）')
-        if args.rearrange:
-            result = midi_rearrange.rearrange_file(
-                output,
-                velocity=args.rearrange_velocity,
-                min_ms=args.rearrange_min_ms,
-                chord_ms=args.rearrange_chord_ms,
-                repeat_ms=args.rearrange_repeat_ms)
-            print(f'  -> {result.path}')
+        if args.score:
+            _run_score(events, output, args)
     return 1 if failures else 0
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from transkun_app.score.model import KEYS, MODES, TIME_SIGNATURES
+
     parser = argparse.ArgumentParser(
         prog='transkun-app',
-        description='Transkun：钢琴音频转 MIDI（命令行 / 浏览器 WebUI）')
+        description='Transkun：钢琴音频转 MIDI + 打谱版（命令行 / 浏览器）')
     parser.add_argument(
         'audio', nargs='?', help='输入音频（wav/mp3/flac/ogg/m4a/aac/aiff/opus）')
     parser.add_argument('-o', '--output', help='输出 MIDI（默认与输入同名 .mid）')
@@ -184,20 +202,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('--batch-output', metavar='DIR',
                         help='批量模式输出目录')
 
-    parser.add_argument('--rearrange', action='store_true',
-                        help='转谱后做一次 MIDI 整理（另存 <输出>.rearranged.mid）')
-    parser.add_argument('--rearrange-velocity', type=int,
-                        default=REARRANGE_DEFAULTS['velocity'], metavar='N',
-                        help='整理：力度 <= 该值的音符删除（默认 30）')
-    parser.add_argument('--rearrange-min-ms', type=int,
-                        default=REARRANGE_DEFAULTS['min_ms'], metavar='MS',
-                        help='整理：最小时值（毫秒，默认 30）')
-    parser.add_argument('--rearrange-chord-ms', type=int,
-                        default=REARRANGE_DEFAULTS['chord_ms'], metavar='MS',
-                        help='整理：琶音整合窗口（毫秒，默认 60）')
-    parser.add_argument('--rearrange-repeat-ms', type=int,
-                        default=REARRANGE_DEFAULTS['repeat_ms'], metavar='MS',
-                        help='整理：连续消除窗口（毫秒，默认 120）')
+    parser.add_argument('--score', action='store_true',
+                        help='转谱后生成打谱版（MusicXML/PDF）')
+    parser.add_argument('--score-mode', choices=MODES, default='block',
+                        help='打谱模式：block=缩编（默认），faithful=保留全部音')
+    parser.add_argument('--score-key', choices=KEYS, default='auto',
+                        help='打谱调性（默认 auto）')
+    parser.add_argument('--score-time-signature', choices=TIME_SIGNATURES,
+                        default='auto', help='打谱拍号（默认 auto）')
+    parser.add_argument('--score-bpm', type=float, default=None,
+                        help='打谱速度（默认自动搜索）')
+    parser.add_argument('--score-title', default='',
+                        help='乐谱标题（默认与音频同名）')
+    parser.add_argument('--score-composer', default='',
+                        help='乐谱作曲者')
+    parser.add_argument('--score-no-pdf', action='store_true',
+                        help='只生成 MusicXML/SVG，不生成 PDF')
 
     parser.add_argument('--check', action='store_true',
                         help='检查运行依赖是否完整（不加载模型）')
@@ -205,8 +225,8 @@ def build_parser() -> argparse.ArgumentParser:
                         help='合成音频跑一遍完整转谱（需要权重，约 1 分钟）')
     parser.add_argument('--keep', metavar='DIR',
                         help='--selftest 的产物保留目录')
-    parser.add_argument('--rearrange-only', action='store_true',
-                        help='只跑 MIDI 整理自检（不需要模型）')
+    parser.add_argument('--score-selftest', action='store_true',
+                        help='只跑打谱自检（不需要模型）')
     parser.add_argument('--check-fonts', action='store_true',
                         help=argparse.SUPPRESS)
     parser.add_argument('--version', action='store_true', help='显示版本')
@@ -222,9 +242,9 @@ def main(argv=None) -> int:
               f'{UPSTREAM_VERSION}）')
         return 0
 
-    if args.rearrange_only:
-        from transkun_app import midi_rearrange
-        return midi_rearrange.selftest()
+    if args.score_selftest:
+        from transkun_app.score import selftest
+        return selftest.main([])
 
     if args.check:
         from transkun_app import import_check

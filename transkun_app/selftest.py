@@ -58,12 +58,11 @@ def main(argv=None) -> int:
                         help='cpu / cuda / auto（默认 cpu，自检要可重复）')
     parser.add_argument('--keep', metavar='DIR',
                         help='保留自检产物到该目录')
-    parser.add_argument('--no-rearrange', action='store_true',
-                        help='跳过 MIDI 整理')
+    parser.add_argument('--no-score', action='store_true',
+                        help='跳过打谱版（只验证转谱）')
     args = parser.parse_args(argv)
 
     from transkun_app import backend
-    import transkun_app.midi_rearrange as midi_rearrange
 
     work = Path(args.keep) if args.keep else Path(
         tempfile.mkdtemp(prefix='transkun-selftest-'))
@@ -103,10 +102,21 @@ def main(argv=None) -> int:
         ('输出有音符', notes > 0),
         ('MIDI 文件存在', output.exists() and output.stat().st_size > 0),
     ]
-    if not args.no_rearrange:
-        result = midi_rearrange.rearrange_file(output)
-        print(f'整理版: {result.path}（{result.detail()}）')
-        checks.append(('整理版存在', result.path.exists()))
+    if not args.no_score:
+        try:
+            from transkun_app.score import (ScoreOptions,
+                                            generate_score_from_events)
+            result = generate_score_from_events(
+                events, work / 'selftest.score',
+                ScoreOptions(title='自检 · Transkun'))
+            print(f'打谱版: {result.musicxml} / {result.pdf}')
+            checks.append(('MusicXML 存在',
+                           bool(result.musicxml and result.musicxml.exists())))
+            checks.append(('PDF 存在',
+                           bool(result.pdf and result.pdf.exists())))
+        except Exception as exc:  # noqa: BLE001 - 自检要给出明确失败
+            print(f'打谱失败: {type(exc).__name__}: {exc}', file=sys.stderr)
+            checks.append(('打谱版生成', False))
 
     failed = [name for name, ok in checks if not ok]
     for name, ok in checks:

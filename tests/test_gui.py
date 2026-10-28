@@ -19,8 +19,8 @@ def test_load_and_save_config(tmp_path, monkeypatch):
     monkeypatch.setattr(gui, 'CONFIG_DIR', tmp_path)
     monkeypatch.setattr(gui, 'CONFIG_FILE', tmp_path / 'config.json')
     assert gui.load_config() == {}
-    gui.save_config({'device': 'cpu', 'rearrange_velocity': 40})
-    assert gui.load_config()['rearrange_velocity'] == 40
+    gui.save_config({'device': 'cpu', 'score_mode': 'faithful'})
+    assert gui.load_config()['score_mode'] == 'faithful'
 
 
 def test_load_config_ignores_broken_file(tmp_path, monkeypatch):

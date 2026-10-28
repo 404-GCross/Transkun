@@ -29,18 +29,23 @@ jobs:
           python -m compileall -q transkun
           bash -n packaging/*.sh
           python packaging/check-shell.py
+      - name: System libs for PDF
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcairo2 fonts-noto-cjk
       - name: Dependency check
         run: transkun-app --check
       - name: Unit tests
         run: python -m pytest tests -q
-      - name: MIDI post-processing selftest
-        run: transkun-app --rearrange-only
+      - name: Score edition selftest
+        run: transkun-app --score-selftest
       - name: WebUI selftest (no model)
         run: python -m transkun_app.webui.selftest
       - name: Tk GUI smoke test (Xvfb)
         run: |
           sudo apt-get update
-          sudo apt-get install -y python3-tk xvfb xauth fonts-noto-cjk
+          sudo apt-get install -y python3-tk xvfb xauth fonts-noto-cjk \
+            libcairo2
           sudo fc-cache -f >/dev/null 2>&1 || true
           PYTHONPATH=. xvfb-run -a python3 -m transkun_app.cli --check-fonts
           PYTHONPATH=. xvfb-run -a python3 -c "
@@ -115,7 +120,7 @@ jobs:
       - name: Build offline runtime
         run: |
           sudo apt-get update
-          sudo apt-get install -y zstd
+          sudo apt-get install -y zstd libcairo2
           VERSION="${GITHUB_REF_NAME#v}"
           case "$VERSION" in [0-9]*) ;; *) VERSION="0.0.0" ;; esac
           VERSION="$VERSION" bash packaging/build-runtime.sh
@@ -126,7 +131,7 @@ jobs:
           mkdir -p "$tmp/home"
           tar --zstd -xf dist/transkun-runtime-*.tar.zst -C "$tmp/home"
           "$tmp/home/venv/bin/python" -m transkun_app.import_check
-          "$tmp/home/venv/bin/python" -m transkun_app.midi_rearrange --selftest
+          "$tmp/home/venv/bin/python" -m transkun_app.score.selftest
           rm -rf "$tmp"
       - uses: actions/upload-artifact@v4
         with:
@@ -237,7 +242,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y curl ca-certificates file xvfb fonts-noto-cjk \
-            libx11-6 libxft2 libfontconfig1 libfreetype6 libxrender1 \
+            libcairo2 libx11-6 libxft2 libfontconfig1 libfreetype6 libxrender1 \
             libxss1 libxext6 libxcb1 libxau6 libxdmcp6
       - name: Build AppImage
         run: |
@@ -249,7 +254,7 @@ jobs:
           set -euo pipefail
           appdir="$PWD/.appimage/Transkun.AppDir"
           "$appdir/usr/venv/bin/python" -m transkun_app.import_check
-          "$appdir/usr/venv/bin/python" -m transkun_app.midi_rearrange --selftest
+          "$appdir/usr/venv/bin/python" -m transkun_app.score.selftest
           appimage="$(ls dist/*.AppImage)"
           "$appimage" --appimage-extract-and-run --version
           xvfb-run -a "$appimage" --appimage-extract-and-run --check-fonts

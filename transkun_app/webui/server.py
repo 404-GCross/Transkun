@@ -28,6 +28,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
 from fastapi.staticfiles import StaticFiles
 
 from transkun_app import __version__
+from transkun_app.score.model import KEYS, MODES, TIME_SIGNATURES
 from transkun_app.webui import jobs as jobs_module
 
 APP_NAME = 'Transkun'
@@ -191,7 +192,7 @@ class WebConfig:
     queue_limit: int = 8
     keep_hours: float = 24.0
     version: str = 'dev'
-    rearrange_defaults: dict = field(default_factory=dict)
+    score_defaults: dict = field(default_factory=dict)
 
 
 # --------------------------------------------------------------------- 应用
@@ -307,20 +308,37 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
                 'queue_limit': config.queue_limit,
                 'keep_hours': config.keep_hours,
             },
-            'rearrange_defaults': config.rearrange_defaults,
+            'score_defaults': config.score_defaults,
         }
 
     # ------------------------------------------------------------------ 任务
 
-    def rearrange_params(rearrange, velocity, min_ms, chord_ms, repeat_ms):
-        if not truthy(rearrange):
+    def score_params(score, mode, key, time_signature, bpm, pdf,
+                     title, composer):
+        if not truthy(score):
             return None
+        if mode not in MODES:
+            raise HTTPException(400, '未知打谱模式：{}'.format(mode))
+        if key not in KEYS:
+            raise HTTPException(400, '未知调性：{}'.format(key))
+        if time_signature not in TIME_SIGNATURES:
+            raise HTTPException(400, '未知拍号：{}'.format(time_signature))
+        bpm_value = None
+        if str(bpm or '').strip():
+            try:
+                bpm_value = float(bpm)
+            except ValueError as exc:
+                raise HTTPException(400, 'BPM 必须是数字') from exc
+            if not 20 <= bpm_value <= 300:
+                raise HTTPException(400, 'BPM 必须在 20~300 之间')
         return {
-            'velocity': max(0, min(127, int(velocity))),
-            'min_ms': max(0, int(min_ms)),
-            'chord_ms': max(0, int(chord_ms)),
-            'repeat_ms': max(0, int(repeat_ms)),
-            'drums': False,
+            'mode': mode,
+            'key': key,
+            'time_signature': time_signature,
+            'bpm': bpm_value,
+            'pdf': truthy(pdf),
+            'title': (title or '').strip()[:200],
+            'composer': (composer or '').strip()[:200],
         }
 
     @app.post('/api/jobs', status_code=202,
@@ -329,11 +347,14 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
         request: Request,
         file: UploadFile = File(...),
         model: str = Form(MODEL_ID),
-        rearrange: str = Form('false'),
-        velocity: int = Form(30),
-        min_ms: int = Form(30),
-        chord_ms: int = Form(60),
-        repeat_ms: int = Form(120),
+        score: str = Form('false'),
+        score_mode: str = Form('block'),
+        score_key: str = Form('auto'),
+        score_time_signature: str = Form('auto'),
+        score_bpm: str = Form(''),
+        score_pdf: str = Form('true'),
+        score_title: str = Form(''),
+        score_composer: str = Form(''),
     ):
         if manager.queued_count() >= config.queue_limit:
             raise HTTPException(
@@ -379,8 +400,9 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
             job = jobs_module.Job(
                 id=job_id, filename=original, model=MODEL_ID,
                 directory=directory, input_path=destination,
-                rearrange=rearrange_params(
-                    rearrange, velocity, min_ms, chord_ms, repeat_ms))
+                score=score_params(
+                    score, score_mode, score_key, score_time_signature,
+                    score_bpm, score_pdf, score_title, score_composer))
             snapshot = manager.submit(job)
         except jobs_module.QueueFull as exc:
             manager.discard(job_id)
@@ -434,11 +456,14 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
     def retry_job(
         job_id: str,
         model: str = MODEL_ID,
-        rearrange: str = 'false',
-        velocity: int = 30,
-        min_ms: int = 30,
-        chord_ms: int = 60,
-        repeat_ms: int = 120,
+        score: str = 'false',
+        score_mode: str = 'block',
+        score_key: str = 'auto',
+        score_time_signature: str = 'auto',
+        score_bpm: str = '',
+        score_pdf: str = 'true',
+        score_title: str = '',
+        score_composer: str = '',
     ):
         """用同一个已上传的文件、按新参数再转一遍（不用重新上传）。"""
         if model != MODEL_ID:
@@ -453,7 +478,9 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
         try:
             snapshot = manager.clone_for_retry(
                 job_id, MODEL_ID,
-                rearrange_params(rearrange, velocity, min_ms, chord_ms, repeat_ms))
+                score_params(score, score_mode, score_key,
+                             score_time_signature, score_bpm, score_pdf,
+                             score_title, score_composer))
         except KeyError as exc:
             raise HTTPException(404, '任务不存在（可能已被清理）。') from exc
         except FileNotFoundError as exc:
@@ -486,21 +513,46 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
 
     @app.get('/api/jobs/{job_id}/midi', dependencies=[Depends(check_token)])
     def download_midi(job_id: str, kind: str = 'raw'):
-        if kind not in ('raw', 'rearranged'):
-            raise HTTPException(400, 'kind 只能是 raw 或 rearranged。')
+        if kind not in ('raw', 'score'):
+            raise HTTPException(400, 'kind 只能是 raw 或 score。')
         job = manager.get(job_id)
         if job is None:
             raise HTTPException(404, '任务不存在（可能已被清理）。')
-        if not job[kind]:
-            raise HTTPException(
-                404, '还没有整理版 MIDI：转谱时没有勾选后处理。' if kind == 'rearranged'
-                else '还没有生成 MIDI。')
+        if kind == 'score':
+            if not job['score']['midi']:
+                raise HTTPException(404, '还没有打谱版 MIDI。')
+            stored = manager.path(job_id, 'score_midi')
+            suffix = '.score.mid'
+        else:
+            if not job['raw']:
+                raise HTTPException(404, '还没有生成 MIDI。')
+            stored = manager.path(job_id, 'raw')
+            suffix = '.mid'
+        if stored is None or not stored.exists():
+            raise HTTPException(404, '文件已被清理。')
+        stem = Path(job['filename']).stem or 'output'
+        return FileResponse(stored, media_type='audio/midi',
+                            filename=stem + suffix)
+
+    @app.get('/api/jobs/{job_id}/score', dependencies=[Depends(check_token)])
+    def download_score(job_id: str, kind: str = 'musicxml'):
+        if kind not in ('musicxml', 'pdf'):
+            raise HTTPException(400, 'kind 只能是 musicxml 或 pdf。')
+        job = manager.get(job_id)
+        if job is None:
+            raise HTTPException(404, '任务不存在（可能已被清理）。')
+        if not job['score'][kind]:
+            raise HTTPException(404, '还没有生成打谱版 {}.'.format(kind))
         stored = manager.path(job_id, kind)
         if stored is None or not stored.exists():
             raise HTTPException(404, '文件已被清理。')
         stem = Path(job['filename']).stem or 'output'
-        name = stem + ('.rearranged.mid' if kind == 'rearranged' else '.mid')
-        return FileResponse(stored, media_type='audio/midi', filename=name)
+        if kind == 'pdf':
+            return FileResponse(stored, media_type='application/pdf',
+                                filename=stem + '.score.pdf')
+        return FileResponse(stored,
+                            media_type='application/vnd.recordare.musicxml+xml',
+                            filename=stem + '.score.musicxml')
 
     return app
 
@@ -533,11 +585,12 @@ def run_server(args) -> int:
         queue_limit=max(1, int(args.queue)),
         keep_hours=max(0.0, float(args.keep_hours)),
         version=read_version(),
-        rearrange_defaults={
-            'velocity': int(args.rearrange_velocity),
-            'min_ms': int(args.rearrange_min_ms),
-            'chord_ms': int(args.rearrange_chord_ms),
-            'repeat_ms': int(args.rearrange_repeat_ms),
+        score_defaults={
+            'mode': getattr(args, 'score_mode', 'block'),
+            'key': getattr(args, 'score_key', 'auto'),
+            'time_signature': getattr(args, 'score_time_signature', 'auto'),
+            'bpm': '',
+            'pdf': not getattr(args, 'score_no_pdf', False),
         },
     )
 

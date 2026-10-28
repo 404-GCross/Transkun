@@ -311,6 +311,7 @@ do_uninstall() {
   elif [ "$MODE" = appimage ]; then
     run rm -f "${HOME}/.local/bin/transkun-app" \
       "${HOME}/.local/bin/transkun" \
+      "${HOME}/.local/bin/transkun-score" \
       "${HOME}/.local/share/applications/transkun.desktop" \
       "${HOME}/.local/share/icons/hicolor/256x256/apps/transkun.png"
   elif [ "$MODE" = deb ]; then
@@ -633,6 +634,7 @@ install_appimage() {
   local bin="${HOME}/.local/bin"
   local target="${bin}/transkun-app"
   local upstream="${bin}/transkun"
+  local score="${bin}/transkun-score"
   local icon_dir="${HOME}/.local/share/icons/hicolor/256x256/apps"
   local desktop="${HOME}/.local/share/applications/transkun.desktop"
 
@@ -648,7 +650,11 @@ install_appimage() {
 #!/bin/sh
 exec "${target}" --upstream-cli "\$@"
 EOF
-    chmod 755 "$upstream"
+    cat > "$score" <<EOF
+#!/bin/sh
+exec "${target}" --score-cli "\$@"
+EOF
+    chmod 755 "$upstream" "$score"
   fi
   INSTALL_PATH="$target"
   if [ "$DRY_RUN" = 1 ]; then
