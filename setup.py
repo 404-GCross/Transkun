@@ -32,7 +32,7 @@ app_requirements = [
 "music21",            # notation, analysis, MusicXML
 "verovio",            # MusicXML -> SVG
 "cairosvg",           # SVG -> PDF
-"pikepdf",            # PDF page merge
+"pypdf",              # PDF page merge (pure Python)
 ]
 
 setuptools.setup(

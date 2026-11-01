@@ -73,7 +73,7 @@ grep -v -E '^(torch|torchaudio)[[:space:]]*$' "$ROOT/requirements.txt" \
 "$UV_BIN" pip install --python "$VENV_PY" -r "$WORK/requirements-no-torch.txt"
 "$UV_BIN" pip install --python "$VENV_PY" \
   fastapi uvicorn python-multipart soundfile mido \
-  music21 verovio cairosvg pikepdf
+  music21 verovio cairosvg pypdf
 "$UV_BIN" pip install --python "$VENV_PY" --no-deps "$SOURCE_DIR[app]"
 # 清掉 setuptools 就地构建留下的产物，别打进 AppImage。
 rm -rf "$SOURCE_DIR/build" "$SOURCE_DIR"/*.egg-info

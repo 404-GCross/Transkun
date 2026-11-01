@@ -21,7 +21,7 @@ MODULES = [
 ]
 
 # PDF 渲染依赖；macOS/AppImage 上可能没有 libcairo，缺了只影响 PDF。
-OPTIONAL_MODULES = ['cairosvg', 'pikepdf']
+OPTIONAL_MODULES = ['cairosvg', 'pypdf']
 
 
 def main(argv=None) -> int:

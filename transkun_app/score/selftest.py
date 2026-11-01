@@ -79,9 +79,10 @@ def main(argv=None) -> int:
         checks.append(('PDF 存在', bool(result.pdf and result.pdf.exists())))
         if result.pdf and result.pdf.exists():
             try:
-                import pikepdf
-                with pikepdf.open(str(result.pdf)) as pdf:
-                    checks.append((f'PDF 页数 {len(pdf.pages)}', len(pdf.pages) > 0))
+                from pypdf import PdfReader
+                reader = PdfReader(str(result.pdf))
+                checks.append((f'PDF 页数 {len(reader.pages)}',
+                               len(reader.pages) > 0))
             except Exception as exc:  # noqa: BLE001
                 checks.append((f'PDF 可打开（{exc}）', False))
 

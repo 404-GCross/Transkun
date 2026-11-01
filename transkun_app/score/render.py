@@ -1,4 +1,4 @@
-"""MusicXML → SVG / PDF（Verovio + cairosvg + pikepdf）。"""
+"""MusicXML → SVG / PDF（Verovio + cairosvg + pypdf）。"""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ def render_pdf(svg_paths: list, pdf_path: Path) -> tuple[Optional[Path], list]:
     warnings = []
     try:
         import cairosvg
-        import pikepdf
+        from pypdf import PdfReader, PdfWriter
     except Exception as exc:  # noqa: BLE001
         return None, [f'PDF 渲染依赖缺失（{exc}）；已保留 SVG/MusicXML。']
 
@@ -113,11 +113,12 @@ def render_pdf(svg_paths: list, pdf_path: Path) -> tuple[Optional[Path], list]:
                 return None, [f'第 {index} 页 PDF 转换失败（{exc}）；已保留 SVG/MusicXML。']
             page_pdfs.append(page_pdf)
         try:
-            merged = pikepdf.Pdf.new()
+            writer = PdfWriter()
             for page_pdf in page_pdfs:
-                with pikepdf.open(str(page_pdf)) as source:
-                    merged.pages.extend(source.pages)
-            merged.save(str(pdf_path))
+                for page in PdfReader(str(page_pdf)).pages:
+                    writer.add_page(page)
+            with pdf_path.open('wb') as handle:
+                writer.write(handle)
         except Exception as exc:  # noqa: BLE001
             return None, [f'PDF 合并失败（{exc}）；已保留 SVG/MusicXML。']
     return pdf_path, warnings

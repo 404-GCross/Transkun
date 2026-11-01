@@ -9,7 +9,7 @@ Transkun 本仓库代码为 MIT（见 `LICENSE`）。分发包还包含以下组
 | [music21](https://web.mit.edu/music21/) | 乐谱分析、MusicXML | BSD-3-Clause |
 | [Verovio](https://www.verovio.org/) | MusicXML → SVG | LGPL-3.0 |
 | [CairoSVG](https://cairosvg.org/) | SVG → PDF | LGPL-3.0 |
-| [pikepdf](https://pikepdf.readthedocs.io/) | PDF 合并 | MPL-2.0 |
+| [pypdf](https://pypdf.readthedocs.io/) | PDF 合并 | BSD-3-Clause |
 | [Noto Sans CJK SC](https://github.com/notofonts/noto-cjk) | 乐谱中文标题 | SIL OFL-1.1（`transkun_app/score/assets/OFL.txt`） |
 | [FastAPI](https://fastapi.tiangolo.com/) / [Uvicorn](https://www.uvicorn.org/) | WebUI | MIT / BSD-3-Clause |
 | [librosa](https://librosa.org/)（可选） | 后续节拍分析 | ISC |

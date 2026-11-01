@@ -28,7 +28,7 @@
   → 和弦化：同格起音合并、滚奏加琶音记号
   → 可演奏性：跨度/音数清理（保留旋律与低音）
   → music21：MusicXML + score MIDI
-  → Verovio：SVG；cairosvg + pikepdf：PDF
+  → Verovio：SVG；cairosvg + pypdf：PDF
 ```
 
 ## 参数
@@ -67,7 +67,7 @@ transkun_app/score/
   analysis.py    MIDI/事件解析、调性、BPM、量化
   layout.py      左右手、和弦、可演奏性
   notation.py    music21 → MusicXML / score MIDI
-  render.py      Verovio SVG → PDF（cairosvg + pikepdf）
+  render.py      Verovio SVG → PDF（cairosvg + pypdf）
   pipeline.py    编排
   cli.py         transkun-score
   selftest.py    合成音符自检
@@ -91,7 +91,7 @@ GUI：勾选“转谱后生成打谱版”，完成后打开 MusicXML / PDF。
 ## 依赖与打包
 
 - `music21`（BSD-3）、`verovio`（LGPL-3）、`cairosvg`（LGPL-3）、
-  `pikepdf`（MPL-2.0）。
+  `pypdf`（MPL-2.0）。
 - PDF 需要 `libcairo2`（Debian）/ `cairo`（Fedora）；AppImage 目标机没有
   cairo 时只保留 MusicXML/SVG。
 - 中文标题：随包 `NotoSansCJKsc-Regular.otf`（OFL-1.1），Verovio SVG 用该

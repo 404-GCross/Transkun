@@ -73,9 +73,8 @@ def test_generate_score_files(tmp_path):
     score = converter.parse(str(result.musicxml))
     assert score is not None
 
-    import pikepdf
-    with pikepdf.open(str(result.pdf)) as pdf:
-        assert len(pdf.pages) >= 1
+    from pypdf import PdfReader
+    assert len(PdfReader(str(result.pdf)).pages) >= 1
 
 
 def test_score_does_not_overwrite_performance_midi(tmp_path):
