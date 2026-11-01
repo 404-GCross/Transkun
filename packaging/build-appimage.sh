@@ -135,19 +135,27 @@ else
 fi
 
 # ---------------------------------------------------------------- ffmpeg
-# m4a/aac/opus 解码需要 ffmpeg；AppImage 要做到目标机零依赖，所以内置静态版。
-log "内置 ffmpeg（静态版）…"
-fetch "https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz" \
-  "$WORK/ffmpeg.tar.xz"
+# m4a/aac/opus 解码需要 ffmpeg；AppImage 尽量内置静态版。下载失败不阻断构建，
+# 目标机有 ffmpeg 时仍可解码。
+log "内置 ffmpeg（静态版，LGPL）…"
 mkdir -p "$WORK/ffmpeg" "$APPDIR/usr/bin"
-tar -xJf "$WORK/ffmpeg.tar.xz" -C "$WORK/ffmpeg"
-ffmpeg_bin="$(find "$WORK/ffmpeg" -type f -name ffmpeg | head -1 || true)"
-if [ -n "$ffmpeg_bin" ]; then
-  cp "$ffmpeg_bin" "$APPDIR/usr/bin/ffmpeg"
-  chmod 755 "$APPDIR/usr/bin/ffmpeg"
-  log "ffmpeg: $("$APPDIR/usr/bin/ffmpeg" -version 2>/dev/null | head -1)"
+ffmpeg_ok=0
+if fetch "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-lgpl.tar.xz" \
+    "$WORK/ffmpeg.tar.xz"; then
+  if tar -xJf "$WORK/ffmpeg.tar.xz" -C "$WORK/ffmpeg"; then
+    ffmpeg_bin="$(find "$WORK/ffmpeg" -type f -name ffmpeg | head -1 || true)"
+    if [ -n "$ffmpeg_bin" ]; then
+      cp "$ffmpeg_bin" "$APPDIR/usr/bin/ffmpeg"
+      chmod 755 "$APPDIR/usr/bin/ffmpeg"
+      ffmpeg_ok=1
+      log "ffmpeg: $("$APPDIR/usr/bin/ffmpeg" -version 2>/dev/null | head -1)"
+    fi
+  fi
+fi
+if [ "$ffmpeg_ok" = 1 ]; then
+  log "已内置 ffmpeg"
 else
-  warn "ffmpeg 解压失败；m4a/aac 需要目标机自行安装 ffmpeg。"
+  warn "未内置 ffmpeg；m4a/aac/opus 需要目标机自行安装 ffmpeg（WAV/MP3/FLAC 仍可用）。"
 fi
 
 # ---------------------------------------------------------------- 运行时文件
