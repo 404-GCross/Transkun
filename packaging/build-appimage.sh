@@ -13,7 +13,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.3.1}"
+VERSION="${VERSION:-0.3.2}"
 ARCH="${ARCH:-x86_64}"
 OUT="$ROOT/dist"
 WORK="$ROOT/.appimage"

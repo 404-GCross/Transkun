@@ -51,10 +51,13 @@
 
 0.3.0 曾把起音和音尾独立吸附到 1/4 与 1/3 网格，相减会得到 `1/12`、`5/12`
 等混合时值，music21 只能写成 `12:11`、`6:5` 这类非法 tuplet，甚至把
-`start`/`stop` 落在同一个音上。0.3.1 起改为：
+`start`/`stop` 落在同一个音上。0.3.1 起保证合法；0.3.2 起按起音间隔
+聚组，混合织体也能保留更多三连音：
 
 - **每个音符只选一种网格**：16 分（1/4）或三连音（1/6），不再混用。
-- 连续、等时值、起音间隔正确的 3 个三连音才聚成一组，统一挂 `Tuplet(3, 2)`。
+- 连续、起音间隔正确的 3 个三连音才聚成一组，统一挂 `Tuplet(3, 2)`；
+  组内和弦时值统一到三连音单位（短音补到下一个起音），不再要求每个和弦
+  时值完全相同。
 - 组起点必须在 16 分网格上，组总时值必须是二进制时值，且**不跨小节**。
 - 孤立或不足 3 个的三连音回退到标准 16 分时值；不会写单音符 tuplet。
 - 左右手切分可能把一组三连音拆到两只手；被拆开的音同样回退到 16 分，
@@ -65,6 +68,15 @@
 
 如果三连音没有被识别，通常是 BPM 估计落在了等价的二进制速度上（例如
 95 BPM 被估成 142 BPM）。用 `--bpm 95` 指定实际速度即可恢复三连音。
+
+## 速度与播放
+
+- MusicXML 视觉上仍用文本 `M.M. 95`（避免 Verovio/cairosvg 的 SMuFL
+  节拍器字形缺字），同时在同一个 `<direction>` 里写
+  `<sound tempo="95"/>`，MuseScore/DAW 会按 95 BPM 播放。
+- score MIDI 写入 `set_tempo = 60e6 / bpm`，不再回落默认 120 BPM。
+- 回归测试会检查：MusicXML 有 `<sound tempo>`、score MIDI 的
+  `set_tempo` 匹配 BPM、64 拍测试曲的 score MIDI 长度与输入误差 < 2%。
 
 ## 三种模式（规划）
 
@@ -128,13 +140,18 @@ GUI：勾选“转谱后生成打谱版”，完成后打开 MusicXML / PDF。
 - 三连音 XML：按 `(staff, voice, number)` 检查组大小必须为 3、比例只能是
   `3:2`、组不跨小节、组跨度与 `actual-notes:normal-notes` 匹配。
 - 随机混合网格：120 个随机音符必须能写出 MusicXML，不能出现无法记谱的时值。
+- 混合织体：同一起音上不同时值的和弦仍应聚成三连音，组内时值统一。
+- 速度：MusicXML `<sound tempo>` 与 score MIDI `set_tempo` 必须匹配 BPM，
+  score MIDI 长度与输入误差 < 2%。
 - 端到端：合成事件 → MusicXML/PDF/score MIDI（`--selftest`）。
 - CI：pytest、`transkun-app --score-selftest`、runtime/AppImage/macOS 冒烟。
 
 ## 路线
 
 - **0.3.0**：规则版，MusicXML + PDF，WebUI/GUI 接入。
-- **0.3.1**（当前）：修复非法 tuplet（单音符组、`12:11`/`6:5`、跨小节），
+- **0.3.1**：修复非法 tuplet（单音符组、`12:11`/`6:5`、跨小节），
   增加 `--tuplet-mode auto|none`，并清理悬空 beam。
+- **0.3.2**（当前）：修复 tempo 只写文本导致 score MIDI/MuseScore 按
+  120 BPM 播放；三连音改为按起音间隔聚组，混合织体保留更多三连音。
 - **0.3.x**：自动拍号/下拍改进、琶音跨网格合并、faithful 多声部。
 - **0.4**：可选 beat/downbeat 小模型；云端 LLM 作为“参数顾问”的 A/B 实验。

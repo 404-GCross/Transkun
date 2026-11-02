@@ -1,10 +1,12 @@
 """节奏整理：把量化后的和弦归一化，并把连续三连音显式聚成 3:2 组。
 
 music21 的 ``makeNotation()`` 会为每个带 ``time-modification`` 的音写自己的
-``<tuplet>`` 标记，不会自动把连续三个三连音合成一组。因此这里先做两件事：
+``<tuplet>`` 标记，不会自动把连续三个三连音合成一组。因此这里先做三件事：
 
 1. 只允许标准二进制时值，或完整的三连音组（3 个 1/6、1/3、2/3）；
-2. 给完整三连音组的每个和弦挂上同一个 ``Tuplet(3, 2)``，让 music21 输出
+2. 按**起音间隔**识别连续三连音，组内和弦时值统一到三连音单位
+   （混合织体里旋律/伴奏时值不同也能保留）；
+3. 给完整三连音组的每个和弦挂上同一个 ``Tuplet(3, 2)``，让 music21 输出
    start/continue/stop，而不是每个音一个单音符 tuplet。
 """
 
@@ -45,13 +47,6 @@ def _close(a: float, b: float) -> bool:
     return abs(a - b) <= TOL
 
 
-def _ternary_duration(value: float):
-    for candidate in TERNARY_DURATIONS:
-        if _close(value, candidate):
-            return candidate
-    return None
-
-
 def _snap_binary(value: float) -> float:
     return min(BINARY_DURATIONS, key=lambda item: abs(item - value))
 
@@ -73,6 +68,17 @@ def _largest_binary_fit(max_duration: float) -> float:
             return candidate
     # 空间不足一个 16 分：仍写 16 分，允许极小的声部重叠，避免非法时值。
     return BINARY_DURATIONS[0]
+
+
+def _onset_unit(items: list, index: int):
+    """返回从 ``items[index]`` 开始的连续三连音起音间隔（1/6、1/3、2/3）。"""
+    if index + 1 >= len(items):
+        return None
+    delta = items[index + 1].qstart - items[index].qstart
+    for candidate in TERNARY_DURATIONS:
+        if _close(delta, candidate):
+            return candidate
+    return None
 
 
 def _valid_group(group: list, duration: float, mlen: float) -> bool:
@@ -111,19 +117,19 @@ def normalize_rhythm(chords: list, time_signature: str = '4/4',
         items.sort(key=lambda item: item.qstart)
         index = 0
         while index < len(items):
-            duration = _ternary_duration(items[index].qdur)
-            if duration is None or tuplet_mode == 'none':
+            if tuplet_mode == 'none':
+                break
+            # 以起音间隔识别三连音 run，而不是要求每个和弦时值完全相同。
+            # 混合织体里旋律/伴奏同起音但时值不同，仍应保留三连音。
+            unit = _onset_unit(items, index)
+            if unit is None:
                 index += 1
                 continue
 
-            # 连续、等时值、起音间隔等于时值的三连音 run
             end = index + 1
             while end < len(items):
-                candidate = items[end]
-                previous = items[end - 1]
-                if (_ternary_duration(candidate.qdur) != duration
-                        or not _close(candidate.qstart - previous.qstart,
-                                      duration)):
+                if not _close(items[end].qstart - items[end - 1].qstart,
+                              unit):
                     break
                 end += 1
 
@@ -131,14 +137,19 @@ def normalize_rhythm(chords: list, time_signature: str = '4/4',
             cursor = 0
             while cursor + 3 <= len(run):
                 group = run[cursor:cursor + 3]
-                if _valid_group(group, duration, mlen):
+                if _valid_group(group, unit, mlen):
                     for chord in group:
                         chord.tuplet = (3, 2)
+                        # 统一到三连音单位；短音补到下一个起音，避免
+                        # 组内混入 16 分/附点时值造成跨度不匹配。
+                        chord.qdur = unit
                     tuplet_groups += 1
                     cursor += 3
                 else:
                     break
-            index = end
+            # 未成组的边界音可能是下一段不同单位三连音的起点，
+            # 不要直接跳过（例如 1/3 三连音后面接 1/6 三连音）。
+            index = index + cursor if cursor else index + 1
 
     # 未进入合法三连音组的和弦：回退到二进制 16 分网格。
     # 关键：截断时只能选 BINARY_DURATIONS 里的标准时值，绝不能直接用

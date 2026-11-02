@@ -11,37 +11,42 @@ from types import SimpleNamespace
 from transkun_app.score.model import ScoreOptions
 
 
-def _demo_events():
+SELFTEST_BPM = 95
+
+
+def _demo_events(bpm=SELFTEST_BPM):
     events = []
+    beat = 60.0 / bpm
 
     def add(pitch, start, end, velocity=80):
         events.append(SimpleNamespace(pitch=pitch, start=start, end=end,
                                       velocity=velocity))
 
-    # 4 小节：右手和弦 + 旋律，左手低音
+    # 4 小节：右手和弦 + 旋律，左手低音（时间用拍数表示，随 BPM 缩放）
     for bar in range(4):
-        base = bar * 2.0
+        base = bar * 4 * beat
         for pitch in (62, 66, 69, 74):
-            add(pitch, base, base + 0.5, 85)
-        add(78, base + 0.5, base + 1.0, 90)
-        add(81, base + 1.0, base + 1.5, 88)
-        add(74, base, base + 2.0, 70)
-        add(50, base, base + 1.0, 80)
-        add(45, base + 1.0, base + 2.0, 75)
+            add(pitch, base, base + beat, 85)
+        add(78, base + beat, base + 2 * beat, 90)
+        add(81, base + 2 * beat, base + 3 * beat, 88)
+        add(74, base, base + 4 * beat, 70)
+        add(50, base, base + 2 * beat, 80)
+        add(45, base + 2 * beat, base + 4 * beat, 75)
     # 滚奏和弦（应加琶音记号）
     for index, pitch in enumerate((62, 66, 69, 74)):
-        add(pitch, 8.0 + index * 0.02, 10.0, 80)
+        add(pitch, 16 * beat + index * 0.02, 20 * beat, 80)
     # 超宽和弦（应删内声部）
-    add(45, 10.0, 12.0, 80)
-    add(64, 10.0, 12.0, 80)
-    add(72, 10.0, 12.0, 80)
-    add(84, 10.0, 12.0, 80)
+    add(45, 20 * beat, 24 * beat, 80)
+    add(64, 20 * beat, 24 * beat, 80)
+    add(72, 20 * beat, 24 * beat, 80)
+    add(84, 20 * beat, 24 * beat, 80)
     # 三连音：两整组 + 一个孤立音（孤立音应回退到 16 分，不生成单音符 tuplet）
     for group in range(2):
-        base = 12.0 + group * 0.5
+        base = 24 * beat + group * beat
         for index, pitch in enumerate((72, 76, 79)):
-            add(pitch, base + index / 6.0, base + (index + 1) / 6.0, 80)
-    add(84, 13.0, 13.0 + 1 / 6.0, 80)
+            add(pitch, base + index * beat / 3,
+                base + (index + 1) * beat / 3, 80)
+    add(84, 26 * beat, 26 * beat + beat / 3, 80)
     return events
 
 
@@ -57,7 +62,8 @@ def main(argv=None) -> int:
     work.mkdir(parents=True, exist_ok=True)
     base = work / 'demo.score'
     options = ScoreOptions(
-        mode='block', bpm=120, arpeggio_ms=50, title='自检 · 中文标题', composer='Transkun',
+        mode='block', bpm=SELFTEST_BPM, arpeggio_ms=50,
+        title='自检 · 中文标题', composer='Transkun',
         pdf=not args.no_pdf, svg=True, score_midi=True)
 
     from transkun_app.score import generate_score_from_events
@@ -97,6 +103,29 @@ def main(argv=None) -> int:
                                for item in details)))
         except Exception as exc:  # noqa: BLE001
             checks.append((f'三连音结构（{exc}）', False))
+        try:
+            import xml.etree.ElementTree as ET
+            root = ET.parse(str(result.musicxml)).getroot()
+            tempos = [float(item.get('tempo')) for item in root.iter('sound')
+                      if item.get('tempo')]
+            checks.append(('MusicXML 有 sound tempo',
+                           any(abs(value - SELFTEST_BPM) < 0.1
+                               for value in tempos)))
+        except Exception as exc:  # noqa: BLE001
+            checks.append((f'MusicXML 速度（{exc}）', False))
+    if result.midi and result.midi.exists():
+        try:
+            import mido
+            midi = mido.MidiFile(str(result.midi))
+            tempos = [mido.tempo2bpm(message.tempo)
+                      for track in midi.tracks for message in track
+                      if message.type == 'set_tempo']
+            checks.append(('Score MIDI 速度匹配',
+                           bool(tempos) and all(
+                               abs(value - SELFTEST_BPM) < 0.1
+                               for value in tempos)))
+        except Exception as exc:  # noqa: BLE001
+            checks.append((f'Score MIDI 速度（{exc}）', False))
     if not args.no_pdf:
         checks.append(('PDF 存在', bool(result.pdf and result.pdf.exists())))
         if result.pdf and result.pdf.exists():

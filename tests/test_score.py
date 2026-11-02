@@ -220,3 +220,77 @@ def test_triplet_beams_are_balanced(tmp_path):
                     assert key in open_beams
                     del open_beams[key]
         assert not open_beams
+
+
+def test_musicxml_has_sound_tempo(tmp_path):
+    """M.M. 文本方向必须同时带 <sound tempo>，否则播放器按 120 BPM。"""
+    import xml.etree.ElementTree as ET
+
+    from transkun_app.score import generate_score_from_events
+
+    events = [SimpleNamespace(pitch=60, start=0.0, end=0.5, velocity=80)]
+    result = generate_score_from_events(
+        events, tmp_path / 'tempo.score',
+        ScoreOptions(bpm=95, time_signature='4/4', pdf=False, svg=False,
+                     score_midi=False))
+    root = ET.parse(str(result.musicxml)).getroot()
+    tempos = [float(item.get('tempo')) for item in root.iter('sound')
+              if item.get('tempo')]
+    words = [item.text or '' for item in root.iter('words')]
+    assert any(abs(value - 95.0) < 0.01 for value in tempos), tempos
+    assert any('M.M. 95' in value for value in words), words
+
+
+def test_score_midi_tempo_matches_bpm(tmp_path):
+    import mido
+
+    from transkun_app.score import generate_score_from_events
+
+    events = [SimpleNamespace(pitch=60, start=0.0, end=0.5, velocity=80)]
+    result = generate_score_from_events(
+        events, tmp_path / 'tempo.score',
+        ScoreOptions(bpm=95, time_signature='4/4', pdf=False, svg=False,
+                     score_midi=True))
+    midi = mido.MidiFile(str(result.midi))
+    tempos = [mido.tempo2bpm(message.tempo)
+              for track in midi.tracks for message in track
+              if message.type == 'set_tempo']
+    assert tempos, 'score MIDI 没有 set_tempo'
+    assert all(abs(value - 95.0) < 0.01 for value in tempos), tempos
+
+
+def test_score_midi_length_close_to_input(tmp_path):
+    import mido
+
+    from transkun_app.score import generate_score_from_events
+
+    bpm = 95.0
+    beat = 60.0 / bpm
+    events = [SimpleNamespace(pitch=60, start=index * beat,
+                              end=(index + 1) * beat, velocity=80)
+              for index in range(64)]
+    result = generate_score_from_events(
+        events, tmp_path / 'length.score',
+        ScoreOptions(bpm=bpm, time_signature='4/4', pdf=False, svg=False,
+                     score_midi=True))
+    midi = mido.MidiFile(str(result.midi))
+    raw_length = 64 * beat
+    assert abs(midi.length - raw_length) / raw_length < 0.02, (
+        midi.length, raw_length)
+
+
+def test_mixed_duration_triplet_group(tmp_path):
+    """同一起音上不同时值的和弦不应阻止三连音聚组。"""
+    from transkun_app.score.layout import ChordEvent
+    from transkun_app.score.rhythm import normalize_rhythm
+
+    chords = [
+        ChordEvent('R', 0.0, 1 / 6, [60], 80),
+        ChordEvent('R', 1 / 3, 1 / 3, [64], 80),
+        ChordEvent('R', 2 / 3, 1 / 6, [67], 80),
+    ]
+    result = normalize_rhythm(chords, '4/4', 'auto')
+    assert result.stats['tuplet_groups'] == 1
+    assert all(chord.tuplet == (3, 2) for chord in result.chords)
+    assert all(abs(chord.qdur - 1 / 3) < 1e-9
+               for chord in result.chords)

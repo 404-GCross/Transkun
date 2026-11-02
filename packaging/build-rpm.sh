@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.3.1}"
+VERSION="${VERSION:-0.3.2}"
 rm -rf "$ROOT/.rpmbuild"
 mkdir -p "$ROOT/dist"
 rm -f "$ROOT/dist"/transkun-*.rpm

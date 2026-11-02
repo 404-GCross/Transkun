@@ -4,7 +4,7 @@
 # 用法：
 #   curl -fsSL https://gh-proxy.com/https://github.com/404-GCross/transkun/releases/latest/download/install.sh | bash
 #   bash install.sh --dry-run                 # 只打印解析到的版本、URL 和将执行的命令
-#   bash install.sh --version 0.3.1           # 固定版本
+#   bash install.sh --version 0.3.2           # 固定版本
 #   bash install.sh --file ./xxx.deb --yes    # 离线：装本地包
 #   bash install.sh --cuda cu124              # 装完顺手换成 CUDA 版 PyTorch
 #   bash install.sh --uninstall

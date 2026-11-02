@@ -65,7 +65,8 @@ def _generate(notes: list[NoteEvent], base: Path,
     measures = count_measures(score)
 
     base.parent.mkdir(parents=True, exist_ok=True)
-    musicxml = write_musicxml(score, Path(str(base) + '.musicxml'))
+    musicxml = write_musicxml(score, Path(str(base) + '.musicxml'),
+                              bpm=bpm)
 
     result = ScoreResult(base=base, musicxml=musicxml)
     result.stats = dict(layout.stats)
@@ -90,7 +91,8 @@ def _generate(notes: list[NoteEvent], base: Path,
 
     if options.score_midi:
         try:
-            result.midi = write_score_midi(score, Path(str(base) + '.mid'))
+            result.midi = write_score_midi(score, Path(str(base) + '.mid'),
+                                           bpm=bpm)
         except Exception as exc:  # noqa: BLE001
             result.warnings.append(f'score MIDI 生成失败：{exc}')
 

@@ -12,7 +12,7 @@ curl -fsSL https://gh-proxy.com/https://github.com/404-GCross/Transkun/releases/
 
 | 参数 | 作用 |
 |---|---|
-| `--version 0.3.1` | 固定版本（默认取最新 release） |
+| `--version 0.3.2` | 固定版本（默认取最新 release） |
 | `--file ./xxx.deb` | 离线安装本地包（`.deb` / `.rpm` / `.AppImage` / `.dmg`） |
 | `--appimage` | Linux 上强制用免 root 的 AppImage |
 | `--cuda cu124` | 装完顺手换 CUDA 版 PyTorch（`cu124` / `cu126` / `cu128`） |
@@ -103,9 +103,12 @@ transkun-score --selftest
 
 - `block`（默认）同格起音合并为和弦、清理不可演奏内声部、滚奏加琶音记号；
   `faithful` 保留全部音不删内声部。
-- 三连音只在连续 3 个等时值音时聚成 `3:2`；孤立或跨手拆开的音回退 16 分，
-  不会生成单音符 tuplet。`--tuplet-mode none` 可完全关闭三连音。
+- 三连音按起音间隔聚组：连续 3 个起音才写成 `3:2`；同一起音上不同时值的
+  和弦会统一到三连音单位。孤立或跨手拆开的音回退 16 分，不会生成单音符 tuplet。
+  `--tuplet-mode none` 可完全关闭三连音。
 - 调性用 music21 估计；拍号自动暂时保守用 4/4，可通过 UI/CLI 指定 3/4、6/8。
+- MusicXML 同时写文本 `M.M. 95` 和 `<sound tempo="95"/>`；score MIDI 的
+  `set_tempo` 与 BPM 一致，MuseScore/DAW 不再按默认 120 BPM 播放。
 - 中文标题使用随包 `NotoSansCJKsc-Regular.otf`（OFL）渲染；MusicXML 始终保留原文。
 - PDF 需要 `libcairo2`（Debian）/ `cairo`（Fedora）；AppImage 目标机没有 cairo 时
   只保留 MusicXML/SVG。macOS 的 cairosvg 也依赖 cairo，没装时同样只出
@@ -129,13 +132,13 @@ transkun-score --selftest
 
 ```bash
 ./packaging/build-tcltk.sh .tcltk
-VERSION=0.3.1 ./packaging/build-runtime.sh          # → dist/transkun-runtime-0.3.1.tar.zst
-TCLTK_DIR="$PWD/.tcltk" VERSION=0.3.1 \
-  RUNTIME_TARBALL="$PWD/dist/transkun-runtime-0.3.1.tar.zst" \
+VERSION=0.3.2 ./packaging/build-runtime.sh          # → dist/transkun-runtime-0.3.2.tar.zst
+TCLTK_DIR="$PWD/.tcltk" VERSION=0.3.2 \
+  RUNTIME_TARBALL="$PWD/dist/transkun-runtime-0.3.2.tar.zst" \
   ./packaging/build-deb.sh
 # RPM 需要 rpmbuild（Fedora/RHEL 或装了 rpm 的 Debian）
-TCLTK_DIR="$PWD/.tcltk" VERSION=0.3.1 \
-  RUNTIME_TARBALL="$PWD/dist/transkun-runtime-0.3.1.tar.zst" \
+TCLTK_DIR="$PWD/.tcltk" VERSION=0.3.2 \
+  RUNTIME_TARBALL="$PWD/dist/transkun-runtime-0.3.2.tar.zst" \
   ./packaging/build-rpm.sh
 ```
 
@@ -145,8 +148,8 @@ TCLTK_DIR="$PWD/.tcltk" VERSION=0.3.1 \
 安装：
 
 ```bash
-sudo apt install ./dist/transkun_0.3.1_amd64.deb
-sudo dnf install ./dist/transkun-0.3.1-1.x86_64.rpm
+sudo apt install ./dist/transkun_0.3.2_amd64.deb
+sudo dnf install ./dist/transkun-0.3.2-1.x86_64.rpm
 transkun-app
 ```
 
@@ -175,8 +178,8 @@ AppImage 内置 Python 3.12 + 程序 + CPU 依赖 + **带 Xft 的 Tcl/Tk + Noto 
 
 ```bash
 ./packaging/build-tcltk.sh .tcltk
-TCLTK_DIR="$PWD/.tcltk" VERSION=0.3.1 ./packaging/build-appimage.sh
-# 产物: dist/transkun-0.3.1-x86_64.AppImage
+TCLTK_DIR="$PWD/.tcltk" VERSION=0.3.2 ./packaging/build-appimage.sh
+# 产物: dist/transkun-0.3.2-x86_64.AppImage
 ```
 
 - 构建机需要 `fonts-noto-cjk` 和 Xft/fontconfig 运行库；
@@ -188,8 +191,8 @@ TCLTK_DIR="$PWD/.tcltk" VERSION=0.3.1 ./packaging/build-appimage.sh
 ## 构建 macOS 应用包（Apple Silicon）
 
 ```bash
-VERSION=0.3.1 ./packaging/build-macos.sh
-# 产物: dist/Transkun.app、dist/transkun-0.3.1-arm64.dmg
+VERSION=0.3.2 ./packaging/build-macos.sh
+# 产物: dist/Transkun.app、dist/transkun-0.3.2-arm64.dmg
 bash packaging/verify-macos.sh dist/*.dmg
 ```
 
@@ -205,10 +208,10 @@ bash packaging/verify-macos.sh dist/*.dmg
 
 ```bash
 python -m py_compile transkun_app/*.py transkun_app/webui/*.py
-python -m pytest tests -q                     # 43 项（无显示器时 GUI 用例跳过）
+python -m pytest tests -q                     # 47 项（无显示器时 GUI 用例跳过）
 transkun-app --check                          # 依赖 + 权重
 transkun-app --score-selftest                 # 打谱版自检
-transkun-score --selftest                     # 打谱版自检（含三连音结构/跨度校验）
+transkun-score --selftest                     # 打谱版自检（含三连音/速度校验）
 python -m transkun_app.webui.selftest         # WebUI 53 项
 transkun-app --selftest                       # 合成音频 → 模型 → MIDI（约 1 分钟）
 transkun-app --check-fonts                    # 需要 tkinter + DISPLAY（CI 用 xvfb）
@@ -223,21 +226,22 @@ python packaging/check-shell.py               # macOS bash 3.2 写法检查
   探活，然后上传 GitHub Release 和 `SHA256SUMS`。
 
 ```bash
-git tag v0.3.1
-git push origin v0.3.1
+git tag v0.3.2
+git push origin v0.3.2
 ```
 
-## 当前验证状态（0.3.1 打谱修复版）
+## 当前验证状态（0.3.2 打谱修复版）
 
 | 项 | 状态 |
 |---|---|
 | 上游 CLI / 应用 CLI / 批量 / 打谱版 | 本机通过（真实 10 s 音频 → MIDI + MusicXML/PDF） |
 | WebUI（令牌、上传、队列、重转谱、下载） | 本机 53 项接口自检 + 真实 10 s 上传含打谱下载通过 |
-| pytest | 43 项通过（含三连音 XML / 随机混合网格回归；本机无 tkinter，GUI 用例跳过） |
-| 离线运行时 | 0.3.0 发布包验证通过（384 MB，zstd -10；展开 1.6 GB）；0.3.1 待 CI |
-| deb（含运行时 + 权重） | 0.3.0 发布包 432 MB；Debian 容器内验证 CLI / WebUI / 上游 CLI / 打谱 PDF。0.3.1 待 CI |
+| pytest | 47 项通过（含三连音 XML / 随机混合网格 / tempo 回归；本机无 tkinter，GUI 用例跳过） |
+| score MIDI 速度 | 0.3.2 本机验证：95 BPM 输入 293.02 s → score MIDI 293.68 s（+0.23%）；MusicXML 含 `<sound tempo="95"/>` |
+| 离线运行时 | 0.3.1 发布包验证通过（384 MB，zstd -10；展开 1.6 GB）；0.3.2 待 CI |
+| deb（含运行时 + 权重） | 0.3.1 发布包 432 MB；Debian 容器内验证 CLI / WebUI / 上游 CLI / 打谱 PDF。0.3.2 待 CI |
 | Tk 界面 | 代码与 stub 测试完成；本机无显示器，已确认包内 Tk 9.0 可用、无 DISPLAY 时给出友好提示 |
-| macOS | 0.3.0 发布包 787 MB，CI（macos-14）完整通过；0.3.1 待 CI |
-| AppImage | 0.3.0 发布包 546 MB，CI 通过；0.3.1 待 CI |
+| macOS | 0.3.1 发布包 773 MB，CI（macos-14）完整通过；0.3.2 待 CI |
+| AppImage | 0.3.1 发布包 546 MB，CI 通过；0.3.2 待 CI |
 | AppImage 中文 | 本机缺 Xft 开发头文件和 Noto CJK，构建时跳过了带 Xft 的 Tcl/Tk 与字体；CI 会装齐后再构建 |
-| rpm | 0.3.0 发布包 436 MB，CI 通过；0.3.1 待 CI |
+| rpm | 0.3.1 发布包 437 MB，CI 通过；0.3.2 待 CI |

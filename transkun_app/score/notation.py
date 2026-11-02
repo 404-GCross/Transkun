@@ -152,13 +152,59 @@ def count_measures(score) -> int:
         return 0
 
 
-def write_musicxml(score, path: Path) -> Path:
+def _add_sound_tempo(path: Path, bpm: float) -> None:
+    """在 ``M.M.`` 文本方向里补 ``<sound tempo>``。
+
+    Verovio/cairosvg 对 SMuFL 节拍器字形支持不好，所以视觉上仍用文本
+    ``M.M. 95``；但 MusicXML 播放需要 ``<sound tempo="95"/>``，否则
+    MuseScore/DAW 会按默认 120 BPM 播放。
+    """
+    try:
+        text = path.read_text(encoding='utf-8')
+    except OSError:
+        return
+    value = f'{float(bpm):g}'
+    index = text.find('M.M.')
+    while index >= 0:
+        start = text.rfind('<direction', 0, index)
+        close = text.find('</direction>', index)
+        if start >= 0 and close >= 0:
+            block = text[start:close]
+            if '<words' in block and '<sound ' not in block:
+                text = (text[:close] + f'<sound tempo="{value}"/>'
+                        + text[close:])
+                path.write_text(text, encoding='utf-8')
+                return
+        index = text.find('M.M.', index + 1)
+
+
+def write_musicxml(score, path: Path, bpm: float | None = None) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     score.write('musicxml', fp=str(path))
+    if bpm:
+        _add_sound_tempo(path, bpm)
     return path
 
 
-def write_score_midi(score, path: Path) -> Path:
+def write_score_midi(score, path: Path, bpm: float | None = None) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    score.write('midi', fp=str(path))
+    mark = None
+    part = None
+    if bpm:
+        from music21 import tempo
+        try:
+            part = score.parts[0]
+            if not part.getElementsByClass('MetronomeMark'):
+                mark = tempo.MetronomeMark(number=float(bpm))
+                part.insert(0, mark)
+        except Exception:
+            mark = None
+    try:
+        score.write('midi', fp=str(path))
+    finally:
+        if mark is not None:
+            try:
+                part.remove(mark)
+            except Exception:
+                pass
     return path

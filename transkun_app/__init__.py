@@ -1,5 +1,5 @@
 """Transkun 桌面/WebUI 应用包（上游 ``transkun`` 包保持原样）。"""
 
-__version__ = "0.3.1"
+__version__ = "0.3.2"
 UPSTREAM_VERSION = "2.0.1"
 APP_NAME = "Transkun"

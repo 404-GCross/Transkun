@@ -34,7 +34,7 @@ def test_web_and_audio_conflict():
 def test_version(capsys):
     assert cli.main(['--version']) == 0
     out = capsys.readouterr().out
-    assert 'Transkun 0.3.1' in out
+    assert 'Transkun 0.3.2' in out
     assert '2.0.1' in out
 
 
