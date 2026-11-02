@@ -7,6 +7,8 @@ from types import SimpleNamespace
 from transkun_app.score.analysis import NoteEvent, quantize_notes
 from transkun_app.score.layout import assign_hands, build_chords
 from transkun_app.score.model import ScoreOptions
+from transkun_app.score.validate import (
+    tuplet_details, tuplet_report as _tuplet_report, tuplet_span_ok)
 
 
 def _events():
@@ -94,3 +96,127 @@ def test_score_does_not_overwrite_performance_midi(tmp_path):
     assert source.read_bytes() == before
     assert result.midi and result.midi.name == 'song.score.mid'
     assert result.musicxml and result.musicxml.name == 'song.score.musicxml'
+
+
+def test_tuplets_are_grouped_and_legal(tmp_path):
+    from transkun_app.score import generate_score_from_events
+
+    events = []
+    for index, pitch in enumerate((60, 64, 67)):
+        events.append(SimpleNamespace(
+            pitch=pitch, start=index / 6.0,
+            end=index / 6.0 + 1 / 6.0, velocity=80))
+    for index, pitch in enumerate((72, 71, 69, 67, 65, 64)):
+        events.append(SimpleNamespace(
+            pitch=pitch, start=0.5 + index / 12.0,
+            end=0.5 + index / 12.0 + 1 / 12.0, velocity=80))
+    events.append(SimpleNamespace(pitch=60, start=2.0, end=2.0 + 1 / 6.0,
+                                  velocity=80))
+    events.append(SimpleNamespace(pitch=62, start=3.0, end=3.5,
+                                  velocity=80))
+
+    result = generate_score_from_events(
+        events, tmp_path / 'tuplets.score',
+        ScoreOptions(bpm=120, time_signature='4/4', pdf=False, svg=False,
+                     score_midi=False))
+    ratios, groups = _tuplet_report(result.musicxml)
+    assert ratios == {(3, 2)}
+    assert groups, '没有生成任何 tuplet 组'
+    assert all(size >= 2 for _, size in groups), groups
+    assert all(size == 3 for _, size in groups), groups
+    _, details, divisions = tuplet_details(result.musicxml)
+    assert all(item['start_measure'] == item['stop_measure']
+               for item in details), details
+    assert all(tuplet_span_ok(item, divisions) for item in details), details
+    assert result.stats['tuplet_groups'] >= 2
+
+
+def test_tuplet_mode_none_has_no_tuplets(tmp_path):
+    from transkun_app.score import generate_score_from_events
+
+    events = [
+        SimpleNamespace(pitch=60, start=0.0, end=1 / 6.0, velocity=80),
+        SimpleNamespace(pitch=64, start=1 / 6.0, end=2 / 6.0, velocity=80),
+        SimpleNamespace(pitch=67, start=2 / 6.0, end=3 / 6.0, velocity=80),
+    ]
+    result = generate_score_from_events(
+        events, tmp_path / 'none.score',
+        ScoreOptions(bpm=120, time_signature='4/4', tuplet_mode='none',
+                     pdf=False, svg=False, score_midi=False))
+    ratios, groups = _tuplet_report(result.musicxml)
+    assert ratios == set()
+    assert groups == []
+
+
+def test_random_mixed_grid_stays_legal(tmp_path):
+    """混合网格的随机音符不应再产生 17/48、5/16 这类无法记谱的时值。"""
+    import random
+
+    from music21 import converter
+
+    from transkun_app.score import generate_score_from_events
+
+    random.seed(4)
+    events = []
+    now = 0.0
+    for _ in range(120):
+        now += random.choice([0.08, 0.12, 0.16, 0.25, 0.33, 0.5])
+        duration = random.choice([0.08, 0.12, 0.16, 0.25, 0.33, 0.5, 0.75])
+        events.append(SimpleNamespace(
+            pitch=random.randint(40, 84), start=now, end=now + duration,
+            velocity=random.randint(20, 110)))
+
+    result = generate_score_from_events(
+        events, tmp_path / 'random.score',
+        ScoreOptions(bpm=120, time_signature='4/4', pdf=False, svg=False,
+                     score_midi=False))
+    ratios, groups = _tuplet_report(result.musicxml)
+    assert ratios <= {(3, 2)}
+    assert all(size == 3 for _, size in groups), groups
+    _, details, divisions = tuplet_details(result.musicxml)
+    assert all(tuplet_span_ok(item, divisions) for item in details), details
+    assert converter.parse(str(result.musicxml)) is not None
+
+
+def test_triplet_beams_are_balanced(tmp_path):
+    """music21 在纯三连音上会写出悬空 beam；输出前必须清理。"""
+    import xml.etree.ElementTree as ET
+
+    from transkun_app.score import generate_score_from_events
+
+    events = []
+    beat = 0.5
+    now = 0.0
+    for measure in range(12):
+        for beat_index in range(4):
+            for index in range(3):
+                start = now + index * (beat / 3)
+                events.append(SimpleNamespace(
+                    pitch=60 + ((measure * 4 + beat_index + index) % 12),
+                    start=start, end=start + beat / 3, velocity=80))
+            now += beat
+
+    result = generate_score_from_events(
+        events, tmp_path / 'beams.score',
+        ScoreOptions(bpm=120, time_signature='4/4', pdf=False, svg=False,
+                     score_midi=False))
+    root = ET.parse(str(result.musicxml)).getroot()
+    for measure in root.iter('measure'):
+        open_beams = {}
+        for note in measure.findall('note'):
+            if note.find('chord') is not None:
+                continue
+            staff = note.findtext('staff', '1')
+            voice = note.findtext('voice', '1')
+            for beam in note.findall('beam'):
+                key = (staff, voice, beam.get('number'))
+                value = beam.text
+                if value == 'begin':
+                    assert key not in open_beams
+                    open_beams[key] = True
+                elif value == 'continue':
+                    assert key in open_beams
+                elif value == 'end':
+                    assert key in open_beams
+                    del open_beams[key]
+        assert not open_beams

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 MODES = ('block', 'faithful')
+TUPLET_MODES = ('auto', 'none')
 MODE_LABELS = {
     'block': '缩编版（和弦块 + 琶音记号）',
     'faithful': '保留版（不删内声部）',
@@ -32,6 +33,7 @@ class ScoreOptions:
     """
 
     mode: str = 'block'
+    tuplet_mode: str = 'auto'  # auto=聚组三连音；none=纯 16 分
     key: str = 'auto'
     time_signature: str = 'auto'
     bpm: Optional[float] = None
@@ -51,6 +53,8 @@ class ScoreOptions:
     def __post_init__(self):
         if self.mode not in MODES:
             raise ValueError(f'未知打谱模式: {self.mode}')
+        if self.tuplet_mode not in TUPLET_MODES:
+            raise ValueError(f'未知三连音模式: {self.tuplet_mode}')
         if self.key not in KEYS:
             raise ValueError(f'未知调性: {self.key}')
         if self.time_signature not in TIME_SIGNATURES:

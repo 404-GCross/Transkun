@@ -6,7 +6,7 @@ MIT）的 fork，由 [404-GCross](https://github.com/404-GCross/Transkun) 维护
 
 - **命令行**：`transkun-app song.mp3 -o song.mid`（批量、后处理、设备选择）
 - **浏览器 WebUI**：`transkun-app --web --lan`，手机/平板/Mac 打开终端打印的带令牌
-  链接即可用；服务端排队、取消、重新转谱、下载原始/整理版 MIDI
+  链接即可用；服务端排队、取消、重新转谱、下载演奏版 MIDI / 打谱文件
 - **打谱版**：把演奏事件降维成可读的钢琴缩编谱，输出 MusicXML / PDF / score MIDI，
   演奏版 MIDI 保留；调性、拍号、速度可自动估计或手动指定
 - **桌面界面**：`transkun-app` 打开 Tk 窗口（选文件、设备、后处理、进度、日志）
@@ -52,7 +52,7 @@ WebUI 默认端口 8765，令牌保存在 `~/.config/transkun/web_token`。**没
 .venv/bin/transkun-score --selftest     # 同上（独立命令）
 .venv/bin/transkun-app --selftest       # 合成音频 → 模型 → MIDI，约 1 分钟
 .venv/bin/transkun-app --check-fonts    # Tk 中文字体（需要显示器，CI 用 xvfb）
-python -m transkun_app.webui.selftest   # WebUI 接口，50 项，不需要模型
+python -m transkun_app.webui.selftest   # WebUI 接口，53 项，不需要模型
 .venv/bin/python -m pytest tests -q
 ```
 

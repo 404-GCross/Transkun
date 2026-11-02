@@ -28,7 +28,7 @@ from fastapi.responses import (FileResponse, HTMLResponse, JSONResponse,
 from fastapi.staticfiles import StaticFiles
 
 from transkun_app import __version__
-from transkun_app.score.model import KEYS, MODES, TIME_SIGNATURES
+from transkun_app.score.model import KEYS, MODES, TIME_SIGNATURES, TUPLET_MODES
 from transkun_app.webui import jobs as jobs_module
 
 APP_NAME = 'Transkun'
@@ -313,12 +313,14 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
 
     # ------------------------------------------------------------------ 任务
 
-    def score_params(score, mode, key, time_signature, bpm, pdf,
+    def score_params(score, mode, tuplet_mode, key, time_signature, bpm, pdf,
                      title, composer):
         if not truthy(score):
             return None
         if mode not in MODES:
             raise HTTPException(400, '未知打谱模式：{}'.format(mode))
+        if tuplet_mode not in TUPLET_MODES:
+            raise HTTPException(400, '未知三连音模式：{}'.format(tuplet_mode))
         if key not in KEYS:
             raise HTTPException(400, '未知调性：{}'.format(key))
         if time_signature not in TIME_SIGNATURES:
@@ -333,6 +335,7 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
                 raise HTTPException(400, 'BPM 必须在 20~300 之间')
         return {
             'mode': mode,
+            'tuplet_mode': tuplet_mode,
             'key': key,
             'time_signature': time_signature,
             'bpm': bpm_value,
@@ -349,6 +352,7 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
         model: str = Form(MODEL_ID),
         score: str = Form('false'),
         score_mode: str = Form('block'),
+        score_tuplet_mode: str = Form('auto'),
         score_key: str = Form('auto'),
         score_time_signature: str = Form('auto'),
         score_bpm: str = Form(''),
@@ -401,8 +405,9 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
                 id=job_id, filename=original, model=MODEL_ID,
                 directory=directory, input_path=destination,
                 score=score_params(
-                    score, score_mode, score_key, score_time_signature,
-                    score_bpm, score_pdf, score_title, score_composer))
+                    score, score_mode, score_tuplet_mode, score_key,
+                    score_time_signature, score_bpm, score_pdf,
+                    score_title, score_composer))
             snapshot = manager.submit(job)
         except jobs_module.QueueFull as exc:
             manager.discard(job_id)
@@ -458,6 +463,7 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
         model: str = MODEL_ID,
         score: str = 'false',
         score_mode: str = 'block',
+        score_tuplet_mode: str = 'auto',
         score_key: str = 'auto',
         score_time_signature: str = 'auto',
         score_bpm: str = '',
@@ -478,9 +484,9 @@ def create_app(config: WebConfig, manager=None) -> FastAPI:
         try:
             snapshot = manager.clone_for_retry(
                 job_id, MODEL_ID,
-                score_params(score, score_mode, score_key,
-                             score_time_signature, score_bpm, score_pdf,
-                             score_title, score_composer))
+                score_params(score, score_mode, score_tuplet_mode,
+                             score_key, score_time_signature, score_bpm,
+                             score_pdf, score_title, score_composer))
         except KeyError as exc:
             raise HTTPException(404, '任务不存在（可能已被清理）。') from exc
         except FileNotFoundError as exc:
@@ -587,6 +593,7 @@ def run_server(args) -> int:
         version=read_version(),
         score_defaults={
             'mode': getattr(args, 'score_mode', 'block'),
+            'tuplet_mode': getattr(args, 'score_tuplet_mode', 'auto'),
             'key': getattr(args, 'score_key', 'auto'),
             'time_signature': getattr(args, 'score_time_signature', 'auto'),
             'bpm': '',

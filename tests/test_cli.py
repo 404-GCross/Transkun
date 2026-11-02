@@ -19,6 +19,7 @@ def test_score_defaults():
     args = cli.build_parser().parse_args(['song.wav', '--score'])
     assert args.score is True
     assert args.score_mode == 'block'
+    assert args.score_tuplet_mode == 'auto'
     assert args.score_key == 'auto'
     assert args.score_time_signature == 'auto'
     assert args.score_no_pdf is False
@@ -33,7 +34,7 @@ def test_web_and_audio_conflict():
 def test_version(capsys):
     assert cli.main(['--version']) == 0
     out = capsys.readouterr().out
-    assert 'Transkun 0.3.0' in out
+    assert 'Transkun 0.3.1' in out
     assert '2.0.1' in out
 
 

@@ -161,6 +161,7 @@ function fillInfo(info) {
 
   const defaults = info.score_defaults || {};
   if (defaults.mode) $('scoreMode').value = defaults.mode;
+  if (defaults.tuplet_mode) $('scoreTuplet').value = defaults.tuplet_mode;
   if (defaults.key) $('scoreKey').value = defaults.key;
   if (defaults.time_signature) $('scoreTime').value = defaults.time_signature;
   if (defaults.bpm !== undefined && defaults.bpm !== null) {
@@ -196,6 +197,9 @@ function updateScoreHint() {
       : '缩编版：同格起音合并成和弦，清理不可演奏内声部，滚奏加琶音记号。');
     if ($('scoreTime').value === 'auto') {
       parts.push('自动拍号暂时保守用 4/4；3/4、6/8 请手动指定。');
+    }
+    if ($('scoreTuplet').value === 'none') {
+      parts.push('纯 16 分模式不会生成三连音，适合导入对 tuplet 敏感的 DAW。');
     }
   }
   $('scoreHint').textContent = parts.join(' ');
@@ -240,6 +244,7 @@ function uploadOne(file, index, total) {
     form.append('model', MODEL);
     form.append('score', $('score').checked ? 'true' : 'false');
     form.append('score_mode', $('scoreMode').value || 'block');
+    form.append('score_tuplet_mode', $('scoreTuplet').value || 'auto');
     form.append('score_key', $('scoreKey').value || 'auto');
     form.append('score_time_signature', $('scoreTime').value || 'auto');
     form.append('score_bpm', $('scoreBpm').value || '');
@@ -487,6 +492,7 @@ async function retryJob(id) {
     model: MODEL,
     score: $('score').checked ? 'true' : 'false',
     score_mode: $('scoreMode').value || 'block',
+    score_tuplet_mode: $('scoreTuplet').value || 'auto',
     score_key: $('scoreKey').value || 'auto',
     score_time_signature: $('scoreTime').value || 'auto',
     score_bpm: $('scoreBpm').value || '',
@@ -570,6 +576,7 @@ function bind() {
   $('score').addEventListener('change', updateScoreHint);
   $('scoreMode').addEventListener('change', updateScoreHint);
   $('scoreTime').addEventListener('change', updateScoreHint);
+  $('scoreTuplet').addEventListener('change', updateScoreHint);
   $('theme').addEventListener('click', toggleTheme);
 
   for (const type of ['dragover', 'drop']) {

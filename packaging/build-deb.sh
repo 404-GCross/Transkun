@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-VERSION="${VERSION:-0.3.0}"
+VERSION="${VERSION:-0.3.1}"
 ARCH="${ARCH:-amd64}"
 OUT="$ROOT/dist"
 PKG="$ROOT/.package/transkun"

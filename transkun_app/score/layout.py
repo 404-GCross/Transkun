@@ -15,6 +15,7 @@ class ChordEvent:
     pitches: list
     velocity: int
     arpeggio: bool = False
+    tuplet: tuple | None = None
 
 
 @dataclass

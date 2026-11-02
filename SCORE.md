@@ -23,9 +23,10 @@
 ```
 演奏事件（秒）+ 可选音频
   → 分析：BPM / 调性 / 拍号（auto 或用户指定）
-  → 量化：16 分 + 三连音网格（music21 兼容）
+  → 量化：每个音符只选 16 分或三连音网格（不混用起音/音尾）
   → 左右手：按起音组搜索可演奏的切分缝隙
   → 和弦化：同格起音合并、滚奏加琶音记号
+  → 节奏整理：连续三连音聚成 3:2；孤立三连音回退 16 分
   → 可演奏性：跨度/音数清理（保留旋律与低音）
   → music21：MusicXML + score MIDI
   → Verovio：SVG；cairosvg + pypdf：PDF
@@ -36,6 +37,7 @@
 | 参数 | 默认 | 说明 |
 |---|---|---|
 | `mode` | `block` | `block` 缩编；`faithful` 不删内声部 |
+| `tuplet_mode` | `auto` | `auto` 把连续三连音聚成 `3:2`；`none` 纯 16 分、不生成 tuplet |
 | `key` | `auto` | music21 Krumhansl 估计；可指定 `D` / `Bm` / `Bb` |
 | `time_signature` | `auto` | 自动暂时保守用 4/4；可指定 3/4、6/8 等 |
 | `bpm` | 自动 | 全局网格误差最小的 BPM；可指定 |
@@ -44,6 +46,25 @@
 | `max_notes` | 5 | 和弦最多音数 |
 | `arpeggio_ms` | 70 | 原始起音跨度达到该值则加琶音记号 |
 | `pdf` | 开 | 渲染依赖缺失时保留 MusicXML/SVG |
+
+## 三连音规则
+
+0.3.0 曾把起音和音尾独立吸附到 1/4 与 1/3 网格，相减会得到 `1/12`、`5/12`
+等混合时值，music21 只能写成 `12:11`、`6:5` 这类非法 tuplet，甚至把
+`start`/`stop` 落在同一个音上。0.3.1 起改为：
+
+- **每个音符只选一种网格**：16 分（1/4）或三连音（1/6），不再混用。
+- 连续、等时值、起音间隔正确的 3 个三连音才聚成一组，统一挂 `Tuplet(3, 2)`。
+- 组起点必须在 16 分网格上，组总时值必须是二进制时值，且**不跨小节**。
+- 孤立或不足 3 个的三连音回退到标准 16 分时值；不会写单音符 tuplet。
+- 左右手切分可能把一组三连音拆到两只手；被拆开的音同样回退到 16 分，
+  不会写成跨声部的 tuplet。
+- 非 tuplet 时值只允许 `1/16`、`1/8`、`3/16`、`1/4`、`3/8`、`1/2`、
+  `3/4`、`1`、`1.5`、`2`、`3`、`4`、`6`、`8` 拍。
+- `--tuplet-mode none` 直接关闭三连音，适合对 tuplet 敏感的 DAW。
+
+如果三连音没有被识别，通常是 BPM 估计落在了等价的二进制速度上（例如
+95 BPM 被估成 142 BPM）。用 `--bpm 95` 指定实际速度即可恢复三连音。
 
 ## 三种模式（规划）
 
@@ -66,7 +87,9 @@ transkun_app/score/
   model.py       ScoreOptions / ScoreResult
   analysis.py    MIDI/事件解析、调性、BPM、量化
   layout.py      左右手、和弦、可演奏性
-  notation.py    music21 → MusicXML / score MIDI
+  rhythm.py      时值归一化、三连音 3:2 聚组
+  notation.py    music21 → MusicXML / score MIDI（含悬空 beam 清理）
+  validate.py    MusicXML 三连音校验（测试 / 自检）
   render.py      Verovio SVG → PDF（cairosvg + pypdf）
   pipeline.py    编排
   cli.py         transkun-score
@@ -82,6 +105,8 @@ transkun-app song.mp3 --score --score-time-signature 3/4 --score-key D
 
 # 只对已有 MIDI 生成
 transkun-score song.mid -o song.score --pdf
+transkun-score song.mid -o song.score --tuplet-mode none   # 纯 16 分
+transkun-score song.mid -o song.score --bpm 95             # 指定速度以保留三连音
 transkun-score --selftest
 ```
 
@@ -91,7 +116,7 @@ GUI：勾选“转谱后生成打谱版”，完成后打开 MusicXML / PDF。
 ## 依赖与打包
 
 - `music21`（BSD-3）、`verovio`（LGPL-3）、`cairosvg`（LGPL-3）、
-  `pypdf`（MPL-2.0）。
+  `pypdf`（BSD-3-Clause）。
 - PDF 需要 `libcairo2`（Debian）/ `cairo`（Fedora）；AppImage 目标机没有
   cairo 时只保留 MusicXML/SVG。
 - 中文标题：随包 `NotoSansCJKsc-Regular.otf`（OFL-1.1），Verovio SVG 用该
@@ -100,11 +125,16 @@ GUI：勾选“转谱后生成打谱版”，完成后打开 MusicXML / PDF。
 ## 测试
 
 - 单元：三连音量化、跨 C4 的左右手、宽和弦、琶音、MusicXML round-trip。
+- 三连音 XML：按 `(staff, voice, number)` 检查组大小必须为 3、比例只能是
+  `3:2`、组不跨小节、组跨度与 `actual-notes:normal-notes` 匹配。
+- 随机混合网格：120 个随机音符必须能写出 MusicXML，不能出现无法记谱的时值。
 - 端到端：合成事件 → MusicXML/PDF/score MIDI（`--selftest`）。
 - CI：pytest、`transkun-app --score-selftest`、runtime/AppImage/macOS 冒烟。
 
 ## 路线
 
-- **0.3.0**：规则版（当前实现），MusicXML + PDF，WebUI/GUI 接入。
+- **0.3.0**：规则版，MusicXML + PDF，WebUI/GUI 接入。
+- **0.3.1**（当前）：修复非法 tuplet（单音符组、`12:11`/`6:5`、跨小节），
+  增加 `--tuplet-mode auto|none`，并清理悬空 beam。
 - **0.3.x**：自动拍号/下拍改进、琶音跨网格合并、faithful 多声部。
 - **0.4**：可选 beat/downbeat 小模型；云端 LLM 作为“参数顾问”的 A/B 实验。

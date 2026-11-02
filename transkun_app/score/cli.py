@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from transkun_app.score.model import (
-    KEYS, MODES, TIME_SIGNATURES, ScoreOptions)
+    KEYS, MODES, TIME_SIGNATURES, TUPLET_MODES, ScoreOptions)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -18,6 +18,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument('-o', '--output', help='输出前缀（默认 <输入>.score）')
     parser.add_argument('--mode', choices=MODES, default='block',
                         help='block=缩编和弦块（默认），faithful=保留全部音')
+    parser.add_argument('--tuplet-mode', choices=TUPLET_MODES,
+                        default='auto',
+                        help='三连音：auto=聚组 3:2（默认），none=纯 16 分')
     parser.add_argument('--key', choices=KEYS, default='auto',
                         help='调性（默认 auto）')
     parser.add_argument('--time-signature', choices=TIME_SIGNATURES,
@@ -60,12 +63,12 @@ def main(argv=None) -> int:
         return 2
     base = Path(args.output) if args.output else source.with_suffix('.score')
     options = ScoreOptions(
-        mode=args.mode, key=args.key, time_signature=args.time_signature,
-        bpm=args.bpm, split=args.split, max_span=args.max_span,
-        max_notes=args.max_notes, arpeggio_ms=args.arpeggio_ms,
-        pdf=not args.no_pdf, svg=not args.no_svg,
-        score_midi=not args.no_score_midi, title=args.title,
-        composer=args.composer, page_size=args.page_size)
+        mode=args.mode, tuplet_mode=args.tuplet_mode, key=args.key,
+        time_signature=args.time_signature, bpm=args.bpm, split=args.split,
+        max_span=args.max_span, max_notes=args.max_notes,
+        arpeggio_ms=args.arpeggio_ms, pdf=not args.no_pdf,
+        svg=not args.no_svg, score_midi=not args.no_score_midi,
+        title=args.title, composer=args.composer, page_size=args.page_size)
 
     from transkun_app.score import generate_score
     try:

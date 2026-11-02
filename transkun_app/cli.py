@@ -33,6 +33,7 @@ def _score_options(args):
     from transkun_app.score import ScoreOptions
     return ScoreOptions(
         mode=args.score_mode,
+        tuplet_mode=args.score_tuplet_mode,
         key=args.score_key,
         time_signature=args.score_time_signature,
         bpm=args.score_bpm,
@@ -153,7 +154,7 @@ def run_batch(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    from transkun_app.score.model import KEYS, MODES, TIME_SIGNATURES
+    from transkun_app.score.model import KEYS, MODES, TIME_SIGNATURES, TUPLET_MODES
 
     parser = argparse.ArgumentParser(
         prog='transkun-app',
@@ -206,6 +207,9 @@ def build_parser() -> argparse.ArgumentParser:
                         help='转谱后生成打谱版（MusicXML/PDF）')
     parser.add_argument('--score-mode', choices=MODES, default='block',
                         help='打谱模式：block=缩编（默认），faithful=保留全部音')
+    parser.add_argument('--score-tuplet-mode', choices=TUPLET_MODES,
+                        default='auto',
+                        help='三连音：auto=聚组 3:2（默认），none=纯 16 分')
     parser.add_argument('--score-key', choices=KEYS, default='auto',
                         help='打谱调性（默认 auto）')
     parser.add_argument('--score-time-signature', choices=TIME_SIGNATURES,

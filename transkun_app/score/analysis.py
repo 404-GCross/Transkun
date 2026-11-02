@@ -144,20 +144,36 @@ def estimate_bpm(notes: list[NoteEvent], low=50.0, high=220.0,
 # --------------------------------------------------------------------- 量化
 
 
-def _quantize_value(value: float, divisors=(4, 3)) -> float:
-    """在 16 分与三连音之间选更近的网格。"""
-    candidates = [round(value * d) / d for d in divisors]
-    return min(candidates, key=lambda c: abs(value - c))
+def _snap(value: float, divisor: int) -> float:
+    return round(value * divisor) / divisor
 
 
 def quantize_notes(notes: list[NoteEvent], bpm: float,
-                   min_units: float = 1 / 16) -> list[QuantizedNote]:
-    """起音/音尾吸附到网格，并做同音高去重/截断。"""
+                   min_units: float = 1 / 16,
+                   tuplet_mode: str = 'auto') -> list[QuantizedNote]:
+    """起音/音尾吸附到网格。
+
+    关键：**同一个音符只选一种网格**（二进制 16 分或三连音 1/6），
+    不能起点用 1/4、终点用 1/3，否则会得到 1/12、5/12 这类非标准时值，
+    music21 只能写出 12:11、6:5 之类的非法 tuplet。
+    """
     beat = 60.0 / bpm
     out: list[QuantizedNote] = []
     for n in notes:
-        qstart = max(0.0, _quantize_value(n.start / beat))
-        qend = max(qstart + min_units, _quantize_value(n.end / beat))
+        start_q = n.start / beat
+        end_q = n.end / beat
+        if tuplet_mode == 'none':
+            grid = 4
+        else:
+            binary_start, binary_end = _snap(start_q, 4), _snap(end_q, 4)
+            ternary_start, ternary_end = _snap(start_q, 6), _snap(end_q, 6)
+            binary_error = abs(start_q - binary_start) + abs(end_q - binary_end)
+            ternary_error = abs(start_q - ternary_start) + abs(end_q - ternary_end)
+            grid = 6 if ternary_error + 1e-9 < binary_error else 4
+        qstart = max(0.0, _snap(start_q, grid))
+        qend = _snap(end_q, grid)
+        minimum = 1 / 6 if grid == 6 else min_units
+        qend = max(qstart + minimum, qend)
         out.append(QuantizedNote(
             pitch=n.pitch, start=n.start, end=n.end,
             velocity=n.velocity, qstart=qstart, qend=qend))

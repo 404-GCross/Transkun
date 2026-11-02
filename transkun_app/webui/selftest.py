@@ -110,8 +110,8 @@ def make_client(runner=None, **overrides):
         device_info='fake:cpu',
         version='test',
         score_defaults={
-            'mode': 'block', 'key': 'auto', 'time_signature': 'auto',
-            'bpm': '', 'pdf': True},
+            'mode': 'block', 'tuplet_mode': 'auto', 'key': 'auto',
+            'time_signature': 'auto', 'bpm': '', 'pdf': True},
     )
     for key, value in overrides.items():
         setattr(config, key, value)
@@ -146,6 +146,7 @@ def upload(client, name='a.wav', payload=None, extra=None, headers=None):
         'model': '2.0',
         'score': 'false',
         'score_mode': 'block',
+        'score_tuplet_mode': 'auto',
         'score_key': 'auto',
         'score_time_signature': 'auto',
         'score_bpm': '',
@@ -273,7 +274,8 @@ def test_retry():
 
     response = client.post('/api/jobs/{}/retry'.format(first), params={
         'model': '2.0', 'score': 'false', 'score_mode': 'block',
-        'score_key': 'auto', 'score_time_signature': 'auto',
+        'score_tuplet_mode': 'auto', 'score_key': 'auto',
+        'score_time_signature': 'auto',
         'score_bpm': '', 'score_pdf': 'true'})
     check('重新转谱返回 202', response.status_code == 202, response.text)
     second = response.json()['id']

@@ -59,6 +59,28 @@ SCORE_TIME_CHOICES = [
     ('2/4', '2/4'), ('6/8', '6/8'), ('3/8', '3/8'),
 ]
 
+SCORE_TUPLET_CHOICES = [
+    ('auto', '自动聚组 3:2'),
+    ('none', '纯 16 分（无 tuplet）'),
+]
+
+
+def _choice_label(choices, value):
+    """把配置里的值转成下拉框显示的文字。"""
+    for candidate, label in choices:
+        if value in (candidate, label):
+            return label
+    return choices[0][1]
+
+
+def _choice_value(choices, label):
+    """把下拉框显示的文字转回配置值。"""
+    for candidate, text in choices:
+        if label in (candidate, text):
+            return candidate
+    return choices[0][0]
+
+
 SCORE_HINT = '演奏 MIDI 保留；打谱版另存 .score.musicxml / .score.pdf。'
 
 CONFIG_DIR = Path(os.environ.get('XDG_CONFIG_HOME', Path.home() / '.config')) / 'transkun'
@@ -256,18 +278,14 @@ class TranskunApp:
 
         self.score_enabled = tk.BooleanVar(
             value=bool(self.config.get('score_enabled', False)))
-        self.score_mode = tk.StringVar(
-            value=self.config.get('score_mode', 'block'))
-        if self.score_mode.get() not in [v for v, _ in SCORE_MODE_CHOICES]:
-            self.score_mode.set('block')
-        self.score_key = tk.StringVar(
-            value=self.config.get('score_key', 'auto'))
-        if self.score_key.get() not in [v for v, _ in SCORE_KEY_CHOICES]:
-            self.score_key.set('auto')
-        self.score_time = tk.StringVar(
-            value=self.config.get('score_time', 'auto'))
-        if self.score_time.get() not in [v for v, _ in SCORE_TIME_CHOICES]:
-            self.score_time.set('auto')
+        self.score_mode = tk.StringVar(value=_choice_label(
+            SCORE_MODE_CHOICES, self.config.get('score_mode', 'block')))
+        self.score_key = tk.StringVar(value=_choice_label(
+            SCORE_KEY_CHOICES, self.config.get('score_key', 'auto')))
+        self.score_time = tk.StringVar(value=_choice_label(
+            SCORE_TIME_CHOICES, self.config.get('score_time', 'auto')))
+        self.score_tuplet = tk.StringVar(value=_choice_label(
+            SCORE_TUPLET_CHOICES, self.config.get('score_tuplet', 'auto')))
         self.score_bpm = tk.StringVar(
             value=str(self.config.get('score_bpm', '') or ''))
         self.score_pdf = tk.BooleanVar(
@@ -331,14 +349,20 @@ class TranskunApp:
                      width=8).pack(side='left', padx=(4, 0))
         cell = ttk.Frame(post)
         cell.grid(row=2, column=1, sticky='w', padx=10, pady=(0, 2))
+        ttk.Label(cell, text='三连音：').pack(side='left')
+        ttk.Combobox(cell, textvariable=self.score_tuplet, state='readonly',
+                     values=[label for _, label in SCORE_TUPLET_CHOICES],
+                     width=22).pack(side='left', padx=(4, 0))
+        cell = ttk.Frame(post)
+        cell.grid(row=3, column=0, sticky='w', padx=10, pady=(0, 2))
         ttk.Label(cell, text='BPM：').pack(side='left')
         ttk.Entry(cell, textvariable=self.score_bpm, width=7).pack(
             side='left', padx=(4, 0))
         ttk.Label(cell, text='（留空 = 自动）').pack(side='left', padx=(4, 0))
         ttk.Checkbutton(post, text='生成 PDF', variable=self.score_pdf).grid(
-            row=3, column=0, sticky='w', padx=10, pady=(0, 2))
+            row=4, column=0, sticky='w', padx=10, pady=(0, 2))
         ttk.Label(post, text=SCORE_HINT).grid(
-            row=4, column=0, columnspan=2, sticky='w', padx=10, pady=(0, 6))
+            row=5, column=0, columnspan=2, sticky='w', padx=10, pady=(0, 6))
 
         buttons = ttk.Frame(main)
         buttons.grid(row=row, column=0, columnspan=3, sticky='ew', pady=(12, 6))
@@ -427,9 +451,14 @@ class TranskunApp:
             'device': self.device_var.get(),
             'threads': threads,
             'score_enabled': bool(self.score_enabled.get()),
-            'score_mode': self.score_mode.get(),
-            'score_key': self.score_key.get(),
-            'score_time': self.score_time.get(),
+            'score_mode': _choice_value(SCORE_MODE_CHOICES,
+                                        self.score_mode.get()),
+            'score_key': _choice_value(SCORE_KEY_CHOICES,
+                                       self.score_key.get()),
+            'score_time': _choice_value(SCORE_TIME_CHOICES,
+                                        self.score_time.get()),
+            'score_tuplet': _choice_value(SCORE_TUPLET_CHOICES,
+                                          self.score_tuplet.get()),
             'score_bpm': self.score_bpm.get().strip(),
             'score_pdf': bool(self.score_pdf.get()),
         }
@@ -513,16 +542,12 @@ class TranskunApp:
                 except ValueError:
                     self.score_bpm.set('')
             score_options = ScoreOptions(
-                mode=dict((label, value) for value, label in
-                          SCORE_MODE_CHOICES).get(self.score_mode.get(),
-                                                  self.score_mode.get()),
-                key=dict((label, value) for value, label in
-                         SCORE_KEY_CHOICES).get(self.score_key.get(),
-                                                self.score_key.get()),
-                time_signature=dict((label, value) for value, label in
-                                    SCORE_TIME_CHOICES).get(
-                                        self.score_time.get(),
-                                        self.score_time.get()),
+                mode=_choice_value(SCORE_MODE_CHOICES, self.score_mode.get()),
+                key=_choice_value(SCORE_KEY_CHOICES, self.score_key.get()),
+                time_signature=_choice_value(SCORE_TIME_CHOICES,
+                                             self.score_time.get()),
+                tuplet_mode=_choice_value(SCORE_TUPLET_CHOICES,
+                                          self.score_tuplet.get()),
                 bpm=bpm, pdf=bool(self.score_pdf.get()))
             self.log('打谱版: 已启用（' + score_options.mode + '，调性 '
                      + score_options.key + '，拍号 '

@@ -37,7 +37,7 @@ app_requirements = [
 
 setuptools.setup(
     name="transkun",
-    version="0.3.0",
+    version="0.3.1",
     author="Yujia Yan; 404-GCross fork",
     description='Transkun: automatic piano transcription (CLI, WebUI, desktop app)',
     long_description=long_description,

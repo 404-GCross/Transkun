@@ -9,6 +9,7 @@ from transkun_app.score.analysis import (
     NoteEvent, estimate_bpm, estimate_key, key_to_dict, load_midi_notes,
     notes_from_events, parse_key, quantize_notes)
 from transkun_app.score.layout import assign_hands, build_chords
+from transkun_app.score.rhythm import normalize_rhythm
 from transkun_app.score.model import ScoreOptions, ScoreResult
 from transkun_app.score.notation import (
     build_score, count_measures, write_musicxml, write_score_midi)
@@ -46,16 +47,20 @@ def _generate(notes: list[NoteEvent], base: Path,
         key_obj = m21key.Key('C')
     time_signature = _time_signature(options.time_signature, notes)
 
-    quantized = quantize_notes(notes, bpm)
+    quantized = quantize_notes(notes, bpm,
+                               tuplet_mode=options.tuplet_mode)
     assign_hands(quantized, split=options.split, max_span=options.max_span)
     layout = build_chords(
         quantized, mode=options.mode, max_span=options.max_span,
         max_notes=options.max_notes, arpeggio_ms=options.arpeggio_ms,
         max_chord_beats=options.max_chord_beats)
+    rhythm = normalize_rhythm(
+        layout.chords, time_signature=time_signature,
+        tuplet_mode=options.tuplet_mode)
 
     title = options.title or base.name
     score = build_score(
-        layout.chords, title=title, composer=options.composer,
+        rhythm.chords, title=title, composer=options.composer,
         key_obj=key_obj, time_signature=time_signature, bpm=bpm)
     measures = count_measures(score)
 
@@ -64,6 +69,7 @@ def _generate(notes: list[NoteEvent], base: Path,
 
     result = ScoreResult(base=base, musicxml=musicxml)
     result.stats = dict(layout.stats)
+    result.stats.update(rhythm.stats)
     result.stats['measures'] = measures
     result.stats['quantized_notes'] = len(quantized)
     result.stats['bpm'] = bpm
@@ -75,6 +81,7 @@ def _generate(notes: list[NoteEvent], base: Path,
         'time_signature': time_signature,
         'bpm': bpm,
         'mode': options.mode,
+        'tuplet_mode': options.tuplet_mode,
         'split': options.split,
         'max_span': options.max_span,
         'max_notes': options.max_notes,

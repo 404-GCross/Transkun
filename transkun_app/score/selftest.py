@@ -36,6 +36,12 @@ def _demo_events():
     add(64, 10.0, 12.0, 80)
     add(72, 10.0, 12.0, 80)
     add(84, 10.0, 12.0, 80)
+    # 三连音：两整组 + 一个孤立音（孤立音应回退到 16 分，不生成单音符 tuplet）
+    for group in range(2):
+        base = 12.0 + group * 0.5
+        for index, pitch in enumerate((72, 76, 79)):
+            add(pitch, base + index / 6.0, base + (index + 1) / 6.0, 80)
+    add(84, 13.0, 13.0 + 1 / 6.0, 80)
     return events
 
 
@@ -75,6 +81,22 @@ def main(argv=None) -> int:
             checks.append(('MusicXML 可解析', parsed is not None))
         except Exception as exc:  # noqa: BLE001
             checks.append((f'MusicXML 可解析（{exc}）', False))
+        try:
+            from transkun_app.score.validate import (
+                tuplet_details, tuplet_span_ok)
+            ratios, details, divisions = tuplet_details(result.musicxml)
+            checks.append(('三连音比例只有 3:2', ratios <= {(3, 2)}))
+            checks.append(('三连音组都是 3 个音',
+                           bool(details) and all(item['count'] == 3
+                                                for item in details)))
+            checks.append(('三连音组不跨小节',
+                           all(item['start_measure'] == item['stop_measure']
+                               for item in details)))
+            checks.append(('三连音跨度匹配',
+                           all(tuplet_span_ok(item, divisions)
+                               for item in details)))
+        except Exception as exc:  # noqa: BLE001
+            checks.append((f'三连音结构（{exc}）', False))
     if not args.no_pdf:
         checks.append(('PDF 存在', bool(result.pdf and result.pdf.exists())))
         if result.pdf and result.pdf.exists():
